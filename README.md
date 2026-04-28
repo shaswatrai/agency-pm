@@ -2,7 +2,9 @@
 
 Beautifully crafted project management for agencies that take design seriously. Built as a single Next.js app with five views (Kanban, List, Gantt, Calendar, Mind map), full invoicing, automations, a client portal, and cross-tab realtime sync.
 
-> Status · Phase 1 visual MVP shipped through Phase 5 advanced. 29 routes. In-memory store with `BroadcastChannel` sync — drop-in replaceable with Supabase Realtime + RLS (migration SQL is ready in `supabase/migrations/0001_init.sql`).
+> Status · Phase 1 visual MVP shipped through Phase 5 advanced. 30 routes. In-memory store with `BroadcastChannel` sync. Backend credentials configurable in-app via Settings → Connections (no env vars). Migration SQL ready at `supabase/migrations/0001_init.sql`.
+>
+> What's real, what's a UI shell, and what's still ahead: see [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## What's in here
 
@@ -33,16 +35,16 @@ npm run dev
 
 Open http://localhost:3000 → redirects to the seeded demo workspace `/atelier/dashboard`.
 
-The app starts in **demo mode** (in-memory data, no auth). To switch to real Supabase, set:
+The app starts in **demo mode** (in-memory data, no auth). To switch to a real backend, **don't set env vars** — instead:
 
-```env
-NEXT_PUBLIC_SUPABASE_URL=...
-NEXT_PUBLIC_SUPABASE_ANON_KEY=...
-RESEND_API_KEY=...        # for email notifications
-EMAIL_FROM="..."
-```
+1. Open the app, go to **Settings → Connections**
+2. Paste your Supabase project URL + anon key, click **Test connection**
+3. Paste your Resend API key + from address, click **Test connection**
+4. Toggle **Connected mode** on
 
-Then run the migration in `supabase/migrations/0001_init.sql` against your Supabase project.
+The credentials live in `localStorage` only. Resend keys are forwarded per-request to a server route that never persists them.
+
+> Backend wiring is split across passes — the data layer doesn't actually consume these credentials yet (see Pass 2 in the roadmap). Today the panel + status badge are real; the swap-out is queued.
 
 ## Scripts
 

@@ -17,6 +17,7 @@ import Link from "next/link";
 import { CommandPalette } from "./CommandPalette";
 import { NotificationCenter } from "./NotificationCenter";
 import { PresenceIndicator } from "./PresenceIndicator";
+import { ConnectionBadge } from "./ConnectionBadge";
 import { Sidebar } from "./Sidebar";
 import { UserAvatar } from "@/components/UserAvatar";
 import { useCurrentUser, useStore } from "@/lib/db/store";
@@ -74,6 +75,10 @@ export function Topbar() {
       </button>
 
       <div className="flex-1" />
+
+      <div className="hidden md:block">
+        <ConnectionBadge />
+      </div>
 
       <div className="hidden lg:block">
         <PresenceIndicator />

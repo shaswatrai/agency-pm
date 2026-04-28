@@ -17,7 +17,9 @@ import {
   GitBranch,
   Slack,
   Sparkles,
+  Plug2,
 } from "lucide-react";
+import { ConnectionsPanel } from "@/components/settings/ConnectionsPanel";
 import { useStore } from "@/lib/db/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,6 +38,13 @@ interface Section {
 }
 
 const SECTIONS: Section[] = [
+  {
+    key: "connections",
+    icon: Plug2,
+    title: "Connections",
+    description:
+      "Configure Supabase + Resend backend without env vars · enables Connected mode",
+  },
   {
     key: "workspace",
     icon: Building2,
@@ -93,7 +102,7 @@ export default function SettingsPage() {
   const orgSlug = useStore((s) => s.organization.slug);
   const users = useStore((s) => s.users);
 
-  const [openKey, setOpenKey] = useState<string | null>("workspace");
+  const [openKey, setOpenKey] = useState<string | null>("connections");
   const [name, setName] = useState(orgName);
   const [accent, setAccent] = useState(221);
   const [inviteEmail, setInviteEmail] = useState("");
@@ -168,6 +177,8 @@ export default function SettingsPage() {
                     transition={{ duration: 0.2 }}
                   >
                     <div className="border-t px-5 py-5">
+                      {s.key === "connections" && <ConnectionsPanel />}
+
                       {s.key === "workspace" && (
                         <div className="grid gap-4">
                           <div>
