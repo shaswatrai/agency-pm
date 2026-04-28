@@ -36,18 +36,18 @@ Goal: enable Connected mode to actually persist data. No new features; just flip
 - ⛔ Resend wired to `/api/email/send` for: invite email, mention email, milestone-approved, invoice sent
 - ⛔ Activity log auto-generated on every server action; dashboard + project Activity tab read it
 
-## Pass 3 — Phase 2 finish (financial) [in progress]
+## Pass 3 — Phase 2 finish (financial) [DONE]
 
 - ✅ Estimate / quote builder (PRD §5.6.1): line items grouped by category, multi-version with timeline, live margin calculator (cost rate vs bill rate per line)
 - ✅ Quote-to-project conversion (one click → creates project + phases-from-categories + tasks-from-line-items, links back)
 - ✅ Real timesheet approval workflow (PRD §5.3.2): weekly submit, PM approval queue with approve/reject + rejection feedback shown to submitter
 - ✅ Skill matrix (per-user skills × team grid, click to cycle proficiency, sort users by skill)
-- ⛔ Multi-currency FX conversion (per-org base currency + daily rate sync)
-- ⛔ Revenue recognition (deferred vs recognized; percentage-of-completion or milestone)
-- ⛔ Real budget change request workflow (PRD §5.5.2): PM raises, client + admin approve, project budget updates
-- ⛔ Time tracking polish: locked periods, rounding rules, idle detection, timer reminders
-- 🟡 Capacity forecast — current heatmap is past+now; needs forward-looking allocation projection
-- ⛔ Conflict alerts when allocations overlap or > 100% in a week
+- ✅ Multi-currency FX: org base currency + manual rate table in Settings → Workspace; Reports converts all roll-ups to base currency. Live FX feed sync deferred to Pass 7.
+- ✅ Revenue recognition: per-project recognized vs deferred shown on the Budget widget. Milestone projects use sum-of-paid-invoices; others use progress × budget. Two-tone bar visualizes split.
+- ✅ Real budget change request workflow: `Request change` button on every project's Budget widget, full review queue at `/atelier/budget-changes`, approval bumps `project.totalBudget` automatically.
+- ✅ Time tracking polish: rounding rules (exact / 5 / 15 / 30 min), idle threshold, locked weeks list — all in Settings → Time tracking. Timer reminders deferred (depend on Pass 6 notification engine).
+- ✅ Capacity forecast: org-wide stacked-bar curve over the next 8 weeks (allocated vs capacity, peak-load callout) on the Utilization page.
+- ✅ Conflict alerts: red banner above the heatmap listing every >100% allocation, with the user / week / hours / capacity / pct.
 
 ## Pass 4 — Phase 3 finish (client portal)
 

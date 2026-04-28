@@ -4,10 +4,13 @@ import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import {
   AUTOMATIONS,
+  BASE_CURRENCY,
+  BUDGET_CHANGES,
   CLIENTS,
   COMMENTS,
   CURRENT_USER_ID,
   FILES,
+  FX_RATES,
   INVOICES,
   ORG,
   PHASES,
@@ -17,13 +20,17 @@ import {
   TASKS,
   TIMESHEET_SUBMISSIONS,
   TIME_ENTRIES,
+  TIME_TRACKING_CONFIG,
   USER_SKILLS,
   USERS,
 } from "@/lib/db/seed";
 import type {
   AutomationRule,
+  BudgetChangeRequest,
+  BudgetChangeStatus,
   Client,
   Comment,
+  FxRate,
   Invoice,
   InvoiceStatus,
   Phase,
@@ -33,6 +40,7 @@ import type {
   QuoteStatus,
   Task,
   TimeEntry,
+  TimeTrackingConfig,
   TimesheetStatus,
   TimesheetSubmission,
   User,
@@ -57,6 +65,10 @@ interface Store {
   timesheetSubmissions: TimesheetSubmission[];
   skills: string[];
   userSkills: UserSkill[];
+  baseCurrency: string;
+  fxRates: FxRate[];
+  budgetChanges: BudgetChangeRequest[];
+  timeTrackingConfig: TimeTrackingConfig;
 
   // task ops
   moveTask: (taskId: string, status: TaskStatus, position: number) => void;
@@ -109,6 +121,25 @@ interface Store {
   ) => void;
   // skills
   setUserSkill: (userId: string, skill: string, proficiency: 0 | 1 | 2 | 3 | 4) => void;
+  // FX
+  setBaseCurrency: (currency: string) => void;
+  setFxRate: (currency: string, rateToBase: number) => void;
+  // budget change requests
+  addBudgetChange: (
+    req: Omit<
+      BudgetChangeRequest,
+      "id" | "organizationId" | "status" | "createdAt"
+    >,
+  ) => BudgetChangeRequest;
+  reviewBudgetChange: (
+    id: string,
+    status: BudgetChangeStatus,
+    reviewerId: string,
+    reviewNote?: string,
+  ) => void;
+  // time tracking config
+  setTimeTrackingConfig: (patch: Partial<TimeTrackingConfig>) => void;
+  toggleLockedWeek: (weekStart: string) => void;
 }
 
 let counter = 1000;
@@ -131,6 +162,10 @@ export const useStore = create<Store>((set, get) => ({
   timesheetSubmissions: TIMESHEET_SUBMISSIONS,
   skills: SKILLS,
   userSkills: USER_SKILLS,
+  baseCurrency: BASE_CURRENCY,
+  fxRates: FX_RATES,
+  budgetChanges: BUDGET_CHANGES,
+  timeTrackingConfig: TIME_TRACKING_CONFIG,
 
   moveTask: (taskId, status, position) => {
     set((state) => ({
@@ -517,6 +552,90 @@ export const useStore = create<Store>((set, get) => ({
       }
       return {
         userSkills: [...state.userSkills, { userId, skill, proficiency }],
+      };
+    });
+  },
+
+  setBaseCurrency: (currency) => {
+    set({ baseCurrency: currency });
+  },
+
+  setFxRate: (currency, rateToBase) => {
+    set((state) => {
+      const existing = state.fxRates.find((r) => r.currency === currency);
+      if (existing) {
+        return {
+          fxRates: state.fxRates.map((r) =>
+            r.currency === currency
+              ? { ...r, rateToBase, updatedAt: new Date().toISOString() }
+              : r,
+          ),
+        };
+      }
+      return {
+        fxRates: [
+          ...state.fxRates,
+          { currency, rateToBase, updatedAt: new Date().toISOString() },
+        ],
+      };
+    });
+  },
+
+  addBudgetChange: (req) => {
+    const newReq: BudgetChangeRequest = {
+      ...req,
+      id: nextId("bcr"),
+      organizationId: ORG.id,
+      status: "pending",
+      createdAt: new Date().toISOString(),
+    };
+    set((state) => ({ budgetChanges: [...state.budgetChanges, newReq] }));
+    return newReq;
+  },
+
+  reviewBudgetChange: (id, status, reviewerId, reviewNote) => {
+    set((state) => {
+      const req = state.budgetChanges.find((r) => r.id === id);
+      if (!req) return state;
+      const reviewedAt = new Date().toISOString();
+      const nextRequests = state.budgetChanges.map((r) =>
+        r.id === id
+          ? { ...r, status, reviewedAt, reviewedBy: reviewerId, reviewNote }
+          : r,
+      );
+      // If approved, apply to project budget
+      if (status === "approved") {
+        return {
+          budgetChanges: nextRequests,
+          projects: state.projects.map((p) =>
+            p.id === req.projectId
+              ? { ...p, totalBudget: (p.totalBudget ?? 0) + req.delta }
+              : p,
+          ),
+        };
+      }
+      return { budgetChanges: nextRequests };
+    });
+  },
+
+  setTimeTrackingConfig: (patch) => {
+    set((state) => ({
+      timeTrackingConfig: { ...state.timeTrackingConfig, ...patch },
+    }));
+  },
+
+  toggleLockedWeek: (weekStart) => {
+    set((state) => {
+      const locked = state.timeTrackingConfig.lockedWeeks.includes(weekStart);
+      return {
+        timeTrackingConfig: {
+          ...state.timeTrackingConfig,
+          lockedWeeks: locked
+            ? state.timeTrackingConfig.lockedWeeks.filter(
+                (w) => w !== weekStart,
+              )
+            : [...state.timeTrackingConfig.lockedWeeks, weekStart],
+        },
       };
     });
   },

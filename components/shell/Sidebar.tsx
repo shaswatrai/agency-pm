@@ -20,6 +20,7 @@ import {
   PanelLeftOpen,
   FileSignature,
   GraduationCap,
+  Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -88,6 +89,11 @@ export function Sidebar({ variant = "static", onNavigate }: SidebarProps) {
     { href: `/${orgSlug}/skills`, label: "Skills", icon: GraduationCap },
     { href: `/${orgSlug}/quotes`, label: "Quotes", icon: FileSignature },
     { href: `/${orgSlug}/invoices`, label: "Invoices", icon: Receipt },
+    {
+      href: `/${orgSlug}/budget-changes`,
+      label: "Budget changes",
+      icon: Wallet,
+    },
     { href: `/${orgSlug}/files`, label: "Files", icon: FileBox },
     { href: `/${orgSlug}/automations`, label: "Automations", icon: Zap },
     { href: `/${orgSlug}/reports`, label: "Reports", icon: BarChart3 },

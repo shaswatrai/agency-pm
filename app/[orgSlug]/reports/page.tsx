@@ -12,12 +12,13 @@ import {
   Download,
 } from "lucide-react";
 import { useStore } from "@/lib/db/store";
+import { useBaseConverter, formatCurrencyAmount } from "@/lib/db/fx";
 import { BarChart } from "@/components/charts/BarChart";
 import { DonutChart } from "@/components/charts/DonutChart";
 import { LineChart } from "@/components/charts/LineChart";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { cn, formatCurrency } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 export default function ReportsPage() {
   const projects = useStore((s) => s.projects);
@@ -26,8 +27,9 @@ export default function ReportsPage() {
   const invoices = useStore((s) => s.invoices);
   const users = useStore((s) => s.users);
   const clients = useStore((s) => s.clients);
+  const { baseCurrency, convert } = useBaseConverter();
 
-  // Profitability per active project
+  // Profitability per active project — values converted to base currency
   const profitability = useMemo(() => {
     return projects
       .filter((p) => p.status === "active")
@@ -39,15 +41,18 @@ export default function ReportsPage() {
           (s, e) => s + (e.durationMinutes / 60) * 110,
           0,
         );
-        const revenue = (p.totalBudget ?? 0) * p.progress;
+        const client = clients.find((c) => c.id === p.clientId);
+        const projectCurrency = client?.currency ?? "USD";
+        const revenueLocal = (p.totalBudget ?? 0) * p.progress;
+        const revenue = convert(revenueLocal, projectCurrency);
         const margin = revenue - cost;
-        return { project: p, revenue, cost, margin };
+        return { project: p, revenue, cost, margin, projectCurrency };
       })
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 6);
-  }, [projects, tasks, timeEntries]);
+  }, [projects, tasks, timeEntries, clients, convert]);
 
-  // AR aging
+  // AR aging in base currency
   const arAging = useMemo(() => {
     const buckets = { current: 0, "1-30": 0, "31-60": 0, "61-90": 0, "90+": 0 };
     const now = new Date("2026-04-29");
@@ -57,7 +62,7 @@ export default function ReportsPage() {
       const days = Math.floor(
         (now.getTime() - due.getTime()) / (1000 * 60 * 60 * 24),
       );
-      const remaining = inv.total - inv.amountPaid;
+      const remaining = convert(inv.total - inv.amountPaid, inv.currency);
       if (days <= 0) buckets.current += remaining;
       else if (days <= 30) buckets["1-30"] += remaining;
       else if (days <= 60) buckets["31-60"] += remaining;
@@ -65,7 +70,7 @@ export default function ReportsPage() {
       else buckets["90+"] += remaining;
     }
     return buckets;
-  }, [invoices]);
+  }, [invoices, convert]);
 
   // Velocity (synthetic — would normally come from sprint data)
   const velocityData = [22, 28, 26, 32, 24, 30, 28];
@@ -138,6 +143,9 @@ export default function ReportsPage() {
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Profitability, utilization, AR aging, and velocity at a glance
+            <span className="ml-1 text-muted-foreground/80">
+              · all amounts in {baseCurrency}
+            </span>
           </p>
         </div>
         <div className="flex gap-2">
@@ -154,7 +162,7 @@ export default function ReportsPage() {
           {
             icon: DollarSign,
             label: "Revenue recognized",
-            value: formatCurrency(totalRevenueRecognized),
+            value: formatCurrencyAmount(totalRevenueRecognized, baseCurrency),
             delta: "+18.4%",
             positive: true,
             accent: "from-status-done/15",
@@ -178,10 +186,10 @@ export default function ReportsPage() {
           {
             icon: Receipt,
             label: "AR outstanding",
-            value: formatCurrency(totalArOutstanding),
+            value: formatCurrencyAmount(totalArOutstanding, baseCurrency),
             delta:
               arAging["90+"] > 0
-                ? formatCurrency(arAging["90+"]) + " 90+"
+                ? formatCurrencyAmount(arAging["90+"], baseCurrency) + " 90+"
                 : "Clean",
             positive: arAging["90+"] === 0,
             accent: "from-status-blocked/15",
@@ -323,7 +331,7 @@ export default function ReportsPage() {
                     </div>
                     <div className="text-right">
                       <p className="font-mono text-sm font-semibold">
-                        {formatCurrency(p.margin, p.project.totalBudget ? client?.currency : "USD")}
+                        {formatCurrencyAmount(p.margin, baseCurrency)}
                       </p>
                       <p
                         className={cn(
@@ -391,7 +399,7 @@ export default function ReportsPage() {
           <div className="mt-4 flex justify-between border-t pt-3 text-xs">
             <span className="text-muted-foreground">Total outstanding</span>
             <span className="font-mono font-semibold">
-              {formatCurrency(totalArOutstanding)}
+              {formatCurrencyAmount(totalArOutstanding, baseCurrency)}
             </span>
           </div>
         </Card>

@@ -1,11 +1,18 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { TrendingUp, TrendingDown, AlertTriangle } from "lucide-react";
+import {
+  TrendingUp,
+  TrendingDown,
+  AlertTriangle,
+  Plus,
+} from "lucide-react";
 import { useStore } from "@/lib/db/store";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { RequestBudgetChangeDialog } from "@/components/dialogs/RequestBudgetChangeDialog";
 
 interface BudgetWidgetProps {
   projectId: string;
@@ -16,8 +23,14 @@ export function BudgetWidget({ projectId }: BudgetWidgetProps) {
   const allTasks = useStore((s) => s.tasks);
   const allTimeEntries = useStore((s) => s.timeEntries);
   const allClients = useStore((s) => s.clients);
+  const budgetChanges = useStore((s) => s.budgetChanges);
+  const allInvoices = useStore((s) => s.invoices);
+  const [bcrOpen, setBcrOpen] = useState(false);
 
   const project = allProjects.find((p) => p.id === projectId);
+  const pendingChanges = budgetChanges.filter(
+    (r) => r.projectId === projectId && r.status === "pending",
+  );
   const client = project
     ? allClients.find((c) => c.id === project.clientId)
     : undefined;
@@ -43,6 +56,22 @@ export function BudgetWidget({ projectId }: BudgetWidgetProps) {
     const actualHours = totalMinutes / 60;
     const budget = project.totalBudget ?? 0;
     const burnPct = budget === 0 ? 0 : (totalCost / budget) * 100;
+    // Revenue recognition:
+    //  - milestone billing: recognized = sum of paid invoices for this project
+    //  - other models: recognized = budget × progress
+    const projectInvoices = allInvoices.filter(
+      (i) => i.projectId === projectId,
+    );
+    const paidRevenue = projectInvoices
+      .filter((i) => i.status === "paid")
+      .reduce((s, i) => s + i.total, 0);
+    const milestoneRecognized = paidRevenue;
+    const progressRecognized = budget * project.progress;
+    const recognized =
+      project.billingModel === "milestone"
+        ? milestoneRecognized
+        : progressRecognized;
+    const deferred = Math.max(0, budget - recognized);
     return {
       budget,
       totalCost,
@@ -50,9 +79,11 @@ export function BudgetWidget({ projectId }: BudgetWidgetProps) {
       estimatedHours,
       burnPct,
       remaining: budget - totalCost,
+      recognized,
+      deferred,
       currency: client?.currency ?? "USD",
     };
-  }, [project, projectId, allTasks, allTimeEntries, client]);
+  }, [project, projectId, allTasks, allTimeEntries, client, allInvoices]);
 
   if (!project || !stats) return null;
 
@@ -64,7 +95,35 @@ export function BudgetWidget({ projectId }: BudgetWidgetProps) {
         : "from-status-blocked to-status-blocked/60";
 
   return (
-    <div className="grid gap-3 md:grid-cols-4">
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+          Budget · burn rate
+        </div>
+        <div className="flex items-center gap-2">
+          {pendingChanges.length > 0 ? (
+            <span className="inline-flex items-center gap-1 rounded-pill bg-status-progress/15 px-2 py-0.5 text-[10px] font-medium text-status-progress">
+              <span className="size-1.5 rounded-full bg-status-progress animate-pulse" />
+              {pendingChanges.length} change pending
+            </span>
+          ) : null}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setBcrOpen(true)}
+          >
+            <Plus className="size-3.5" /> Request change
+          </Button>
+        </div>
+      </div>
+
+      <RequestBudgetChangeDialog
+        projectId={projectId}
+        open={bcrOpen}
+        onOpenChange={setBcrOpen}
+      />
+
+      <div className="grid gap-3 md:grid-cols-5">
       <motion.div
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
@@ -158,6 +217,42 @@ export function BudgetWidget({ projectId }: BudgetWidgetProps) {
           />
         </div>
       </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.16 }}
+        className="rounded-lg border bg-card p-4"
+      >
+        <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+          Recognized
+        </p>
+        <p className="mt-1 font-mono text-xl font-semibold">
+          {formatCurrency(stats.recognized, stats.currency)}
+        </p>
+        <p className="mt-0.5 text-[11px] text-muted-foreground">
+          {project.billingModel === "milestone" ? "From paid invoices" : "Progress × budget"}
+        </p>
+        <div className="mt-2 flex h-1.5 overflow-hidden rounded-full bg-muted">
+          <motion.div
+            initial={{ width: 0 }}
+            animate={{
+              width: `${stats.budget > 0 ? (stats.recognized / stats.budget) * 100 : 0}%`,
+            }}
+            transition={{ duration: 0.6, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+            className="h-full bg-status-done"
+          />
+          <motion.div
+            initial={{ width: 0 }}
+            animate={{
+              width: `${stats.budget > 0 ? (stats.deferred / stats.budget) * 100 : 0}%`,
+            }}
+            transition={{ duration: 0.6, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
+            className="h-full bg-muted-foreground/30"
+          />
+        </div>
+      </motion.div>
+      </div>
     </div>
   );
 }

@@ -12,7 +12,8 @@ import {
 import { useStore } from "@/lib/db/store";
 import { UserAvatar } from "@/components/UserAvatar";
 import { cn } from "@/lib/utils";
-import { Info } from "lucide-react";
+import { AlertTriangle, Info } from "lucide-react";
+import { Card } from "@/components/ui/card";
 
 const REFERENCE_DATE = new Date("2026-04-29");
 
@@ -81,6 +82,54 @@ export default function UtilizationPage() {
     return allHours.reduce((s, n) => s + n, 0) / allHours.length;
   }, [utilizationGrid]);
 
+  // Conflict alerts: anyone over 100% in any of the next 8 weeks
+  const conflicts = useMemo(() => {
+    const out: Array<{
+      user: (typeof users)[number];
+      weekStart: Date;
+      hours: number;
+      capacity: number;
+      pct: number;
+    }> = [];
+    for (const row of utilizationGrid) {
+      row.weeklyHours.forEach((wh, i) => {
+        const pct = wh.hours / row.capacity;
+        if (pct > 1.0) {
+          out.push({
+            user: row.user,
+            weekStart: weeks[i].start,
+            hours: wh.hours,
+            capacity: row.capacity,
+            pct,
+          });
+        }
+      });
+    }
+    return out.sort((a, b) => b.pct - a.pct);
+  }, [utilizationGrid, weeks]);
+
+  // Org-wide forecast curve: total capacity vs allocated hours per week
+  const forecast = useMemo(() => {
+    return weeks.map((w, i) => {
+      const allocated = utilizationGrid.reduce(
+        (s, row) => s + row.weeklyHours[i].hours,
+        0,
+      );
+      const capacity = utilizationGrid.reduce(
+        (s, row) => s + row.capacity,
+        0,
+      );
+      return { weekStart: w.start, allocated, capacity };
+    });
+  }, [utilizationGrid, weeks]);
+
+  const maxLoadPct = Math.max(
+    ...forecast.map((f) =>
+      f.capacity > 0 ? f.allocated / f.capacity : 0,
+    ),
+    1,
+  );
+
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-[1600px] mx-auto">
       <motion.div
@@ -107,6 +156,146 @@ export default function UtilizationPage() {
           </p>
         </div>
       </motion.div>
+
+      {/* Conflict alerts */}
+      {conflicts.length > 0 ? (
+        <motion.div
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6 overflow-hidden rounded-lg border border-status-blocked/30 bg-status-blocked/5"
+        >
+          <div className="flex items-start gap-3 border-b border-status-blocked/20 px-5 py-3">
+            <div className="grid size-8 place-items-center rounded-md bg-status-blocked/15 text-status-blocked">
+              <AlertTriangle className="size-4" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-status-blocked">
+                {conflicts.length} allocation conflict
+                {conflicts.length === 1 ? "" : "s"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                These team members are scheduled above 100% capacity. Consider
+                rebalancing or extending due dates.
+              </p>
+            </div>
+          </div>
+          <ul className="divide-y divide-status-blocked/10">
+            {conflicts.slice(0, 5).map((c, i) => (
+              <li
+                key={`${c.user.id}-${i}`}
+                className="flex items-center gap-3 px-5 py-2"
+              >
+                <UserAvatar
+                  user={{
+                    name: c.user.fullName,
+                    avatarUrl: c.user.avatarUrl,
+                  }}
+                  size="xs"
+                />
+                <div className="min-w-0 flex-1 text-xs">
+                  <span className="font-medium">{c.user.fullName}</span>
+                  <span className="text-muted-foreground">
+                    {" · "}week of{" "}
+                    {format(c.weekStart, "MMM d")}
+                  </span>
+                </div>
+                <span className="font-mono text-xs">
+                  {c.hours.toFixed(0)}h
+                  <span className="text-muted-foreground">
+                    /{c.capacity}h
+                  </span>
+                </span>
+                <span className="rounded-pill bg-status-blocked px-2 py-0.5 font-mono text-[10px] font-semibold text-white">
+                  {Math.round(c.pct * 100)}%
+                </span>
+              </li>
+            ))}
+            {conflicts.length > 5 ? (
+              <li className="px-5 py-2 text-[11px] text-muted-foreground">
+                +{conflicts.length - 5} more in the heatmap below
+              </li>
+            ) : null}
+          </ul>
+        </motion.div>
+      ) : null}
+
+      {/* Forecast curve */}
+      <Card className="mb-6 p-5">
+        <div className="mb-4 flex items-baseline justify-between">
+          <div>
+            <p className="text-sm font-semibold">Org capacity forecast</p>
+            <p className="text-[11px] text-muted-foreground">
+              Allocated hours vs total capacity · {weeks.length}-week outlook
+            </p>
+          </div>
+          <p
+            className={cn(
+              "font-mono text-sm font-semibold",
+              maxLoadPct > 1.0
+                ? "text-status-blocked"
+                : maxLoadPct > 0.85
+                  ? "text-status-revisions"
+                  : "text-status-done",
+            )}
+          >
+            Peak load {Math.round(maxLoadPct * 100)}%
+          </p>
+        </div>
+        <div className="flex h-28 items-end gap-2">
+          {forecast.map((f, i) => {
+            const pct = f.capacity > 0 ? f.allocated / f.capacity : 0;
+            const heightPct = Math.min(120, pct * 100);
+            const overload = pct > 1.0;
+            return (
+              <div
+                key={i}
+                className="group relative flex flex-1 flex-col items-center gap-1"
+              >
+                <div className="relative flex h-full w-full items-end">
+                  <div className="absolute bottom-[83.3%] h-px w-full bg-status-revisions/40" />
+                  <motion.div
+                    initial={{ height: 0 }}
+                    animate={{ height: `${heightPct}%` }}
+                    transition={{
+                      delay: i * 0.04,
+                      duration: 0.5,
+                      ease: [0.22, 1, 0.36, 1],
+                    }}
+                    className={cn(
+                      "w-full rounded-t",
+                      overload
+                        ? "bg-status-blocked"
+                        : pct > 0.85
+                          ? "bg-status-revisions/70"
+                          : "bg-primary/40",
+                    )}
+                  />
+                </div>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  {format(f.weekStart, "MMM d")}
+                </p>
+                <div className="pointer-events-none absolute -top-7 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md bg-popover px-2 py-1 text-[10px] font-medium opacity-0 shadow-md transition-opacity group-hover:opacity-100">
+                  {f.allocated.toFixed(0)}h / {f.capacity}h ({Math.round(pct * 100)}%)
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="mt-3 flex items-center gap-3 text-[10px] text-muted-foreground">
+          <span className="inline-flex items-center gap-1">
+            <span className="inline-block size-2 rounded-sm bg-primary/40" />
+            Healthy
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span className="inline-block size-2 rounded-sm bg-status-revisions/70" />
+            At risk (&gt;85%)
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span className="inline-block size-2 rounded-sm bg-status-blocked" />
+            Overloaded (&gt;100%)
+          </span>
+        </div>
+      </Card>
 
       <div className="overflow-hidden rounded-lg border bg-card">
         <div

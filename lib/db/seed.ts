@@ -1,7 +1,9 @@
 import type {
   AutomationRule,
+  BudgetChangeRequest,
   Client,
   Comment,
+  FxRate,
   Invoice,
   Organization,
   Phase,
@@ -12,6 +14,7 @@ import type {
   QuoteVersion,
   Task,
   TimeEntry,
+  TimeTrackingConfig,
   TimesheetSubmission,
   User,
   UserSkill,
@@ -1745,3 +1748,68 @@ export const USER_SKILLS: UserSkill[] = [
   { userId: "u_kai", skill: "QA / Testing", proficiency: 4 },
   { userId: "u_kai", skill: "DevOps", proficiency: 2 },
 ];
+
+// ----------------------------------------------------------------------------
+// Multi-currency FX (PRD §5.6.3)
+// ----------------------------------------------------------------------------
+export const BASE_CURRENCY = "USD";
+
+export const FX_RATES: FxRate[] = [
+  { currency: "EUR", rateToBase: 1.08, updatedAt: "2026-04-29T00:00:00Z" },
+  { currency: "GBP", rateToBase: 1.27, updatedAt: "2026-04-29T00:00:00Z" },
+  { currency: "AED", rateToBase: 0.272, updatedAt: "2026-04-29T00:00:00Z" },
+];
+
+// ----------------------------------------------------------------------------
+// Budget change requests (PRD §5.5.2)
+// ----------------------------------------------------------------------------
+export const BUDGET_CHANGES: BudgetChangeRequest[] = [
+  {
+    id: "bcr_1",
+    organizationId: ORG.id,
+    projectId: "p_orchid_ecom",
+    requestedBy: "u_avery",
+    delta: 14000,
+    reason:
+      "Client added the Klaviyo integration mid-flight; needs an extra phase of dev + QA.",
+    status: "pending",
+    createdAt: "2026-04-26T10:00:00Z",
+  },
+  {
+    id: "bcr_2",
+    organizationId: ORG.id,
+    projectId: "p_meridian_app",
+    requestedBy: "u_marcus",
+    delta: 26000,
+    reason:
+      "Live market data scope expanded to include 3 new providers and websocket fallback.",
+    status: "approved",
+    createdAt: "2026-04-15T11:30:00Z",
+    reviewedAt: "2026-04-17T15:00:00Z",
+    reviewedBy: "u_avery",
+    reviewNote: "Approved on the basis of the Q3 roadmap discussion.",
+  },
+  {
+    id: "bcr_3",
+    organizationId: ORG.id,
+    projectId: "p_lumiere_site",
+    requestedBy: "u_marcus",
+    delta: -8500,
+    reason:
+      "Bilingual setup work came in 25% under estimate; offering a partial credit.",
+    status: "rejected",
+    createdAt: "2026-04-08T09:00:00Z",
+    reviewedAt: "2026-04-10T11:00:00Z",
+    reviewedBy: "u_avery",
+    reviewNote: "Hold credit until next milestone for goodwill on a future quote.",
+  },
+];
+
+// ----------------------------------------------------------------------------
+// Time tracking config (PRD §5.3.2)
+// ----------------------------------------------------------------------------
+export const TIME_TRACKING_CONFIG: TimeTrackingConfig = {
+  rounding: "15min",
+  lockedWeeks: ["2026-03-29", "2026-04-05"],
+  idleThresholdMinutes: 240,
+};

@@ -20,6 +20,8 @@ import {
   Plug2,
 } from "lucide-react";
 import { ConnectionsPanel } from "@/components/settings/ConnectionsPanel";
+import { WorkspacePanel } from "@/components/settings/WorkspacePanel";
+import { TimeTrackingPanel } from "@/components/settings/TimeTrackingPanel";
 import { useStore } from "@/lib/db/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,7 +51,15 @@ const SECTIONS: Section[] = [
     key: "workspace",
     icon: Building2,
     title: "Workspace",
-    description: "Organization name, logo, and default currency",
+    description:
+      "Organization name, base currency, FX rate table for multi-currency reports",
+  },
+  {
+    key: "time",
+    icon: Sparkles,
+    title: "Time tracking",
+    description:
+      "Rounding rules, idle threshold, locked weeks for billed periods",
   },
   {
     key: "members",
@@ -103,7 +113,6 @@ export default function SettingsPage() {
   const users = useStore((s) => s.users);
 
   const [openKey, setOpenKey] = useState<string | null>("connections");
-  const [name, setName] = useState(orgName);
   const [accent, setAccent] = useState(221);
   const [inviteEmail, setInviteEmail] = useState("");
 
@@ -179,55 +188,9 @@ export default function SettingsPage() {
                     <div className="border-t px-5 py-5">
                       {s.key === "connections" && <ConnectionsPanel />}
 
-                      {s.key === "workspace" && (
-                        <div className="grid gap-4">
-                          <div>
-                            <Label htmlFor="ws-name" className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                              Workspace name
-                            </Label>
-                            <Input
-                              id="ws-name"
-                              value={name}
-                              onChange={(e) => setName(e.target.value)}
-                              className="mt-1.5"
-                            />
-                          </div>
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                                Slug
-                              </Label>
-                              <div className="mt-1.5 flex items-center gap-1 rounded-md border bg-muted/40 px-3 py-1.5 text-sm">
-                                <span className="text-muted-foreground">
-                                  atelier.app/
-                                </span>
-                                <span className="font-mono">{orgSlug}</span>
-                              </div>
-                            </div>
-                            <div>
-                              <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                                Default currency
-                              </Label>
-                              <select className="mt-1.5 flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm">
-                                <option>USD — US Dollar</option>
-                                <option>EUR — Euro</option>
-                                <option>GBP — British Pound</option>
-                                <option>AED — UAE Dirham</option>
-                              </select>
-                            </div>
-                          </div>
-                          <div className="flex justify-end pt-2">
-                            <Button
-                              size="sm"
-                              onClick={() =>
-                                toast.success("Workspace settings saved")
-                              }
-                            >
-                              Save changes
-                            </Button>
-                          </div>
-                        </div>
-                      )}
+                      {s.key === "workspace" && <WorkspacePanel />}
+
+                      {s.key === "time" && <TimeTrackingPanel />}
 
                       {s.key === "members" && (
                         <div className="space-y-4">

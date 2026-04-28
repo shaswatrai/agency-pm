@@ -365,6 +365,49 @@ export interface UserSkill {
   proficiency: SkillProficiency;
 }
 
+// ----------------------------------------------------------------------------
+// Multi-currency (PRD §5.6.3)
+// ----------------------------------------------------------------------------
+export interface FxRate {
+  /** Foreign currency code, e.g. "EUR" */
+  currency: string;
+  /** Multiply foreign amount by this to get base currency amount */
+  rateToBase: number;
+  updatedAt: string;
+}
+
+// ----------------------------------------------------------------------------
+// Budget change requests (PRD §5.5.2)
+// ----------------------------------------------------------------------------
+export type BudgetChangeStatus = "pending" | "approved" | "rejected";
+
+export interface BudgetChangeRequest {
+  id: string;
+  organizationId: string;
+  projectId: string;
+  requestedBy: string;
+  delta: number; // positive to increase, negative to decrease (in project currency)
+  reason: string;
+  status: BudgetChangeStatus;
+  createdAt: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
+  reviewNote?: string;
+}
+
+// ----------------------------------------------------------------------------
+// Time tracking config (PRD §5.3.2)
+// ----------------------------------------------------------------------------
+export type RoundingRule = "exact" | "5min" | "15min" | "30min";
+
+export interface TimeTrackingConfig {
+  rounding: RoundingRule;
+  /** ISO date strings of weeks where time can no longer be edited */
+  lockedWeeks: string[];
+  /** Idle threshold for timer in minutes; 0 disables */
+  idleThresholdMinutes: number;
+}
+
 export interface Invoice {
   id: string;
   organizationId: string;
