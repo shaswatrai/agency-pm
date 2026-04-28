@@ -18,6 +18,8 @@ import {
   Zap,
   PanelLeftClose,
   PanelLeftOpen,
+  FileSignature,
+  GraduationCap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -83,6 +85,8 @@ export function Sidebar({ variant = "static", onNavigate }: SidebarProps) {
     },
     { href: `/${orgSlug}/timesheet`, label: "Timesheet", icon: Clock },
     { href: `/${orgSlug}/utilization`, label: "Utilization", icon: Activity },
+    { href: `/${orgSlug}/skills`, label: "Skills", icon: GraduationCap },
+    { href: `/${orgSlug}/quotes`, label: "Quotes", icon: FileSignature },
     { href: `/${orgSlug}/invoices`, label: "Invoices", icon: Receipt },
     { href: `/${orgSlug}/files`, label: "Files", icon: FileBox },
     { href: `/${orgSlug}/automations`, label: "Automations", icon: Zap },

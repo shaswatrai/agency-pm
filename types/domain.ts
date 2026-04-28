@@ -267,6 +267,104 @@ export interface AutomationRule {
   createdAt: string;
 }
 
+// ----------------------------------------------------------------------------
+// Quotes / estimates (PRD §5.6.1)
+// ----------------------------------------------------------------------------
+export type QuoteStatus =
+  | "draft"
+  | "sent"
+  | "accepted"
+  | "rejected"
+  | "expired"
+  | "converted";
+
+export type QuoteVersionStatus =
+  | "draft"
+  | "sent"
+  | "superseded"
+  | "accepted"
+  | "rejected";
+
+export interface QuoteLineItem {
+  id: string;
+  category: string;
+  description: string;
+  quantity: number;
+  unit: "hours" | "fixed" | "milestone" | "month";
+  rate: number;
+  costRate: number;
+  amount: number;
+}
+
+export interface QuoteVersion {
+  id: string;
+  versionNumber: number;
+  status: QuoteVersionStatus;
+  notes?: string;
+  lineItems: QuoteLineItem[];
+  subtotal: number;
+  internalCost: number;
+  taxRate: number;
+  taxAmount: number;
+  total: number;
+  createdAt: string;
+  sentAt?: string;
+}
+
+export interface Quote {
+  id: string;
+  organizationId: string;
+  number: string;
+  clientId: string;
+  name: string;
+  type: ProjectType;
+  description?: string;
+  status: QuoteStatus;
+  currency: string;
+  validUntil: string;
+  currentVersionId: string;
+  versions: QuoteVersion[];
+  convertedToProjectId?: string;
+  createdAt: string;
+  createdBy?: string;
+}
+
+// ----------------------------------------------------------------------------
+// Timesheet approval (PRD §5.3.2)
+// ----------------------------------------------------------------------------
+export type TimesheetStatus =
+  | "draft"
+  | "submitted"
+  | "approved"
+  | "rejected";
+
+export interface TimesheetSubmission {
+  id: string;
+  organizationId: string;
+  userId: string;
+  weekStart: string;
+  status: TimesheetStatus;
+  totalMinutes: number;
+  billableMinutes: number;
+  entryIds: string[];
+  notes?: string;
+  submittedAt?: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
+  rejectionReason?: string;
+}
+
+// ----------------------------------------------------------------------------
+// Skill matrix
+// ----------------------------------------------------------------------------
+export type SkillProficiency = 0 | 1 | 2 | 3 | 4; // none / novice / inter / advanced / expert
+
+export interface UserSkill {
+  userId: string;
+  skill: string;
+  proficiency: SkillProficiency;
+}
+
 export interface Invoice {
   id: string;
   organizationId: string;

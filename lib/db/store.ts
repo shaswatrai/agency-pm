@@ -12,8 +12,12 @@ import {
   ORG,
   PHASES,
   PROJECTS,
+  QUOTES,
+  SKILLS,
   TASKS,
+  TIMESHEET_SUBMISSIONS,
   TIME_ENTRIES,
+  USER_SKILLS,
   USERS,
 } from "@/lib/db/seed";
 import type {
@@ -25,9 +29,14 @@ import type {
   Phase,
   Project,
   ProjectFile,
+  Quote,
+  QuoteStatus,
   Task,
   TimeEntry,
+  TimesheetStatus,
+  TimesheetSubmission,
   User,
+  UserSkill,
 } from "@/types/domain";
 import type { TaskStatus } from "@/lib/design/tokens";
 
@@ -44,6 +53,10 @@ interface Store {
   files: ProjectFile[];
   invoices: Invoice[];
   automations: AutomationRule[];
+  quotes: Quote[];
+  timesheetSubmissions: TimesheetSubmission[];
+  skills: string[];
+  userSkills: UserSkill[];
 
   // task ops
   moveTask: (taskId: string, status: TaskStatus, position: number) => void;
@@ -77,6 +90,25 @@ interface Store {
   updateInvoiceStatus: (id: string, status: InvoiceStatus) => void;
   // automation ops
   toggleAutomation: (id: string) => void;
+  // quote ops
+  updateQuoteStatus: (quoteId: string, status: QuoteStatus) => void;
+  setCurrentQuoteVersion: (quoteId: string, versionId: string) => void;
+  addQuoteVersion: (
+    quoteId: string,
+    version: Quote["versions"][number],
+  ) => void;
+  addQuote: (
+    quote: Omit<Quote, "id" | "organizationId" | "createdAt">,
+  ) => Quote;
+  convertQuoteToProject: (quoteId: string) => Project | null;
+  // timesheet ops
+  setTimesheetStatus: (
+    id: string,
+    status: TimesheetStatus,
+    review?: { reviewerId?: string; rejectionReason?: string },
+  ) => void;
+  // skills
+  setUserSkill: (userId: string, skill: string, proficiency: 0 | 1 | 2 | 3 | 4) => void;
 }
 
 let counter = 1000;
@@ -95,6 +127,10 @@ export const useStore = create<Store>((set, get) => ({
   files: FILES,
   invoices: INVOICES,
   automations: AUTOMATIONS,
+  quotes: QUOTES,
+  timesheetSubmissions: TIMESHEET_SUBMISSIONS,
+  skills: SKILLS,
+  userSkills: USER_SKILLS,
 
   moveTask: (taskId, status, position) => {
     set((state) => ({
@@ -271,6 +307,218 @@ export const useStore = create<Store>((set, get) => ({
         a.id === id ? { ...a, isActive: !a.isActive } : a,
       ),
     }));
+  },
+
+  updateQuoteStatus: (quoteId, status) => {
+    set((state) => ({
+      quotes: state.quotes.map((q) =>
+        q.id === quoteId ? { ...q, status } : q,
+      ),
+    }));
+  },
+
+  setCurrentQuoteVersion: (quoteId, versionId) => {
+    set((state) => ({
+      quotes: state.quotes.map((q) =>
+        q.id === quoteId ? { ...q, currentVersionId: versionId } : q,
+      ),
+    }));
+  },
+
+  addQuoteVersion: (quoteId, version) => {
+    set((state) => ({
+      quotes: state.quotes.map((q) =>
+        q.id === quoteId
+          ? {
+              ...q,
+              versions: [
+                ...q.versions.map((v) =>
+                  v.status === "sent" || v.status === "draft"
+                    ? { ...v, status: "superseded" as const }
+                    : v,
+                ),
+                version,
+              ],
+              currentVersionId: version.id,
+            }
+          : q,
+      ),
+    }));
+  },
+
+  addQuote: (quote) => {
+    const newQuote: Quote = {
+      ...quote,
+      id: nextId("q"),
+      organizationId: ORG.id,
+      createdAt: new Date().toISOString(),
+    };
+    set((state) => ({ quotes: [...state.quotes, newQuote] }));
+    return newQuote;
+  },
+
+  convertQuoteToProject: (quoteId) => {
+    const state = get();
+    const quote = state.quotes.find((q) => q.id === quoteId);
+    if (!quote) return null;
+    const version = quote.versions.find(
+      (v) => v.id === quote.currentVersionId,
+    );
+    if (!version) return null;
+    const client = state.clients.find((c) => c.id === quote.clientId);
+    if (!client) return null;
+
+    // Group line items by category → phases
+    const categories = Array.from(
+      new Set(version.lineItems.map((l) => l.category)),
+    );
+
+    const seq =
+      state.projects.filter((p) => p.clientId === quote.clientId).length + 1;
+    const typeAbbr = {
+      web_dev: "WEB",
+      app_dev: "APP",
+      digital_marketing: "MKT",
+      branding: "BRD",
+      maintenance: "MTN",
+      other: "PRJ",
+    }[quote.type];
+    const projectId = nextId("p");
+    const project: Project = {
+      id: projectId,
+      organizationId: ORG.id,
+      clientId: quote.clientId,
+      code: `${client.code}-${typeAbbr}-${String(seq).padStart(3, "0")}`,
+      name: quote.name,
+      type: quote.type,
+      status: "active",
+      priority: "high",
+      projectManagerId: quote.createdBy,
+      billingModel:
+        version.lineItems.some((l) => l.unit === "hours")
+          ? "time_and_materials"
+          : "milestone",
+      totalBudget: version.total,
+      estimatedHours: version.lineItems.reduce(
+        (s, l) => s + (l.unit === "hours" ? l.quantity : l.quantity * 40),
+        0,
+      ),
+      description: quote.description,
+      health: "green",
+      tags: [],
+      progress: 0,
+      taskCounts: { total: version.lineItems.length, done: 0 },
+      createdAt: new Date().toISOString(),
+    };
+
+    const phases: Phase[] = categories.map((name, i) => ({
+      id: `${projectId}_phase_${i + 1}`,
+      projectId,
+      name,
+      position: i + 1,
+      isComplete: false,
+    }));
+
+    const tasks: Task[] = version.lineItems.map((line, i) => {
+      const phase = phases.find((p) => p.name === line.category)!;
+      return {
+        id: nextId("t"),
+        organizationId: ORG.id,
+        projectId,
+        phaseId: phase.id,
+        code: `${project.code}-T${String(i + 1).padStart(3, "0")}`,
+        title: line.description,
+        description: `From quote ${quote.number} v${version.versionNumber}.`,
+        status: "todo",
+        priority: "medium",
+        taskType: line.category,
+        estimatedHours:
+          line.unit === "hours" ? line.quantity : line.quantity * 40,
+        actualHours: 0,
+        assigneeIds: [],
+        clientVisible: true,
+        position: (i + 1) * 1000,
+        tags: [line.category],
+        subtasks: [],
+        commentCount: 0,
+        attachmentCount: 0,
+        subtaskCount: 0,
+        subtasksDone: 0,
+        createdBy: quote.createdBy,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    });
+
+    set((s) => ({
+      projects: [...s.projects, project],
+      phases: [...s.phases, ...phases],
+      tasks: [...s.tasks, ...tasks],
+      quotes: s.quotes.map((q) =>
+        q.id === quoteId
+          ? {
+              ...q,
+              status: "converted" as const,
+              convertedToProjectId: projectId,
+            }
+          : q,
+      ),
+    }));
+
+    return project;
+  },
+
+  setTimesheetStatus: (id, status, review) => {
+    set((state) => ({
+      timesheetSubmissions: state.timesheetSubmissions.map((ts) =>
+        ts.id === id
+          ? {
+              ...ts,
+              status,
+              submittedAt:
+                status === "submitted" && !ts.submittedAt
+                  ? new Date().toISOString()
+                  : ts.submittedAt,
+              reviewedAt:
+                status === "approved" || status === "rejected"
+                  ? new Date().toISOString()
+                  : ts.reviewedAt,
+              reviewedBy: review?.reviewerId ?? ts.reviewedBy,
+              rejectionReason:
+                status === "rejected"
+                  ? review?.rejectionReason
+                  : undefined,
+            }
+          : ts,
+      ),
+    }));
+  },
+
+  setUserSkill: (userId, skill, proficiency) => {
+    set((state) => {
+      const existing = state.userSkills.find(
+        (us) => us.userId === userId && us.skill === skill,
+      );
+      if (proficiency === 0) {
+        return {
+          userSkills: state.userSkills.filter(
+            (us) => !(us.userId === userId && us.skill === skill),
+          ),
+        };
+      }
+      if (existing) {
+        return {
+          userSkills: state.userSkills.map((us) =>
+            us.userId === userId && us.skill === skill
+              ? { ...us, proficiency }
+              : us,
+          ),
+        };
+      }
+      return {
+        userSkills: [...state.userSkills, { userId, skill, proficiency }],
+      };
+    });
   },
 }));
 

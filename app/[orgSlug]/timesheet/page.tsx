@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   startOfWeek,
   addDays,
@@ -9,17 +9,58 @@ import {
   parseISO,
   addWeeks,
   subWeeks,
+  isSameDay,
 } from "date-fns";
-import { ChevronLeft, ChevronRight, Plus, Timer } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  Timer,
+  Send,
+  CheckCircle2,
+  X,
+  AlertCircle,
+  Loader2,
+  Clock,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { UserAvatar } from "@/components/UserAvatar";
 import { useStore, useCurrentUser } from "@/lib/db/store";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import type { TimesheetStatus } from "@/types/domain";
+
+const STATUS_META: Record<
+  TimesheetStatus,
+  { label: string; cls: string }
+> = {
+  draft: {
+    label: "Draft",
+    cls: "bg-status-todo/15 text-status-todo",
+  },
+  submitted: {
+    label: "Submitted",
+    cls: "bg-status-progress/15 text-status-progress",
+  },
+  approved: {
+    label: "Approved",
+    cls: "bg-status-done/15 text-status-done",
+  },
+  rejected: {
+    label: "Rejected",
+    cls: "bg-status-blocked/15 text-status-blocked",
+  },
+};
 
 export default function TimesheetPage() {
   const currentUser = useCurrentUser();
   const tasks = useStore((s) => s.tasks);
   const projects = useStore((s) => s.projects);
+  const users = useStore((s) => s.users);
   const allTimeEntries = useStore((s) => s.timeEntries);
+  const submissions = useStore((s) => s.timesheetSubmissions);
+  const setStatus = useStore((s) => s.setTimesheetStatus);
   const timeEntries = allTimeEntries.filter(
     (e) => e.userId === currentUser.id,
   );
@@ -62,6 +103,66 @@ export default function TimesheetPage() {
 
   const weekTotal = dayTotals.reduce((s, n) => s + n, 0);
 
+  // Find the current week's submission for this user
+  const weekKey = format(weekStart, "yyyy-MM-dd");
+  const ownSubmission = submissions.find(
+    (s) => s.userId === currentUser.id && s.weekStart === weekKey,
+  );
+  const ownStatus: TimesheetStatus = ownSubmission?.status ?? "draft";
+
+  const isPM =
+    currentUser.role === "pm" ||
+    currentUser.role === "admin" ||
+    currentUser.role === "super_admin";
+  const pendingApprovals = submissions.filter((s) => s.status === "submitted");
+
+  const handleSubmit = () => {
+    if (weekTotal === 0) {
+      toast.error("Log some time first before submitting");
+      return;
+    }
+    if (ownSubmission) {
+      setStatus(ownSubmission.id, "submitted", { reviewerId: undefined });
+    } else {
+      // Create a new submission inline
+      const id = `ts_new_${Date.now()}`;
+      useStore.setState((state) => ({
+        timesheetSubmissions: [
+          ...state.timesheetSubmissions,
+          {
+            id,
+            organizationId: state.organization.id,
+            userId: currentUser.id,
+            weekStart: weekKey,
+            status: "submitted",
+            totalMinutes: weekTotal,
+            billableMinutes: weekTotal,
+            entryIds: [],
+            submittedAt: new Date().toISOString(),
+          },
+        ],
+      }));
+    }
+    toast.success(`Week submitted for approval`, {
+      description: `${(weekTotal / 60).toFixed(1)}h to your PM`,
+    });
+  };
+
+  const handleApprove = (id: string) => {
+    setStatus(id, "approved", { reviewerId: currentUser.id });
+    toast.success("Timesheet approved");
+  };
+
+  const handleReject = (id: string) => {
+    const reason = prompt("Reason for rejection?");
+    if (reason === null) return;
+    setStatus(id, "rejected", {
+      reviewerId: currentUser.id,
+      rejectionReason: reason || undefined,
+    });
+    toast.success("Timesheet rejected with feedback");
+  };
+
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-[1400px] mx-auto">
       <motion.div
@@ -78,14 +179,51 @@ export default function TimesheetPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <span
+            className={cn(
+              "inline-flex items-center gap-1 rounded-pill px-2 py-0.5 text-[11px] font-medium",
+              STATUS_META[ownStatus].cls,
+            )}
+          >
+            <span className="size-1.5 rounded-full bg-current" />
+            {STATUS_META[ownStatus].label}
+          </span>
           <Button variant="outline" size="sm">
             <Timer className="size-4" /> Start timer
           </Button>
-          <Button size="sm">
+          <Button variant="outline" size="sm">
             <Plus className="size-4" /> Log time
           </Button>
+          {ownStatus === "draft" || ownStatus === "rejected" ? (
+            <Button size="sm" onClick={handleSubmit}>
+              <Send className="size-4" /> Submit week
+            </Button>
+          ) : null}
         </div>
       </motion.div>
+
+      {/* Rejection feedback for the current week */}
+      <AnimatePresence>
+        {ownSubmission?.status === "rejected" &&
+        ownSubmission.rejectionReason ? (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="mb-5 flex items-start gap-3 rounded-md border border-status-blocked/30 bg-status-blocked/5 p-3 text-xs"
+          >
+            <AlertCircle className="mt-0.5 size-4 shrink-0 text-status-blocked" />
+            <div>
+              <p className="font-medium text-status-blocked">
+                This week was rejected
+              </p>
+              <p className="mt-0.5 text-muted-foreground">
+                {ownSubmission.rejectionReason}
+              </p>
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
 
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-1">
@@ -248,6 +386,92 @@ export default function TimesheetPage() {
           })}
         </ul>
       </div>
+
+      {/* PM approval queue */}
+      {isPM ? (
+        <Card className="mt-6 overflow-hidden">
+          <div className="flex items-center justify-between border-b px-5 py-3">
+            <div>
+              <h3 className="flex items-center gap-2 text-sm font-semibold">
+                <Clock className="size-4 text-primary" /> Approval queue
+              </h3>
+              <p className="text-[11px] text-muted-foreground">
+                {pendingApprovals.length} timesheet
+                {pendingApprovals.length === 1 ? "" : "s"} waiting on you
+              </p>
+            </div>
+          </div>
+          {pendingApprovals.length === 0 ? (
+            <div className="grid place-items-center px-5 py-10 text-center">
+              <CheckCircle2 className="mb-2 size-7 text-status-done" />
+              <p className="text-sm font-medium">No pending approvals</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                All submitted timesheets are reviewed.
+              </p>
+            </div>
+          ) : (
+            <ul className="divide-y">
+              <AnimatePresence initial={false}>
+                {pendingApprovals.map((sub) => {
+                  const submitter = users.find((u) => u.id === sub.userId);
+                  return (
+                    <motion.li
+                      key={sub.id}
+                      layout
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, x: 30, height: 0 }}
+                      className="flex items-center gap-4 px-5 py-3"
+                    >
+                      <UserAvatar
+                        user={{
+                          name: submitter?.fullName ?? "?",
+                          avatarUrl: submitter?.avatarUrl,
+                        }}
+                        size="sm"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium">
+                          {submitter?.fullName}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">
+                          Week of{" "}
+                          {format(parseISO(sub.weekStart), "MMM d")} ·{" "}
+                          {(sub.totalMinutes / 60).toFixed(1)}h logged ·{" "}
+                          {(sub.billableMinutes / 60).toFixed(1)}h billable
+                          {sub.submittedAt
+                            ? ` · submitted ${format(parseISO(sub.submittedAt), "MMM d, h:mm a")}`
+                            : ""}
+                        </p>
+                        {sub.notes ? (
+                          <p className="mt-1 truncate rounded-md bg-muted/30 px-2 py-1 text-[11px] italic text-muted-foreground">
+                            "{sub.notes}"
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="flex shrink-0 gap-1.5">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleReject(sub.id)}
+                        >
+                          <X className="size-3.5" /> Reject
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => handleApprove(sub.id)}
+                        >
+                          <CheckCircle2 className="size-3.5" /> Approve
+                        </Button>
+                      </div>
+                    </motion.li>
+                  );
+                })}
+              </AnimatePresence>
+            </ul>
+          )}
+        </Card>
+      ) : null}
     </div>
   );
 }

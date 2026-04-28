@@ -18,6 +18,9 @@ const SYNC_SLICES = [
   "files",
   "invoices",
   "automations",
+  "quotes",
+  "timesheetSubmissions",
+  "userSkills",
 ] as const;
 
 type SliceName = (typeof SYNC_SLICES)[number];
