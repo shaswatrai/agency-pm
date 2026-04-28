@@ -49,9 +49,18 @@ import { toast } from "sonner";
 interface TaskDetailDrawerProps {
   taskId: string | null;
   onClose: () => void;
+  /** When set, j/k cycle within this task list. Falls back to project tasks. */
+  navTaskIds?: string[];
+  /** Called when j/k navigates to a sibling task. */
+  onNavigate?: (nextTaskId: string) => void;
 }
 
-export function TaskDetailDrawer({ taskId, onClose }: TaskDetailDrawerProps) {
+export function TaskDetailDrawer({
+  taskId,
+  onClose,
+  navTaskIds,
+  onNavigate,
+}: TaskDetailDrawerProps) {
   const allTasks = useStore((s) => s.tasks);
   const allProjects = useStore((s) => s.projects);
   const allComments = useStore((s) => s.comments);
@@ -83,6 +92,48 @@ export function TaskDetailDrawer({ taskId, onClose }: TaskDetailDrawerProps) {
     setTitleDraft(task?.title ?? "");
     setEditingTitle(false);
   }, [task?.id, task?.title]);
+
+  // Keyboard nav: j/k to cycle through siblings, e to edit title
+  useEffect(() => {
+    if (!task) return;
+    const onKey = (e: KeyboardEvent) => {
+      // Skip if user is typing in an input
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      if ((e.key === "j" || e.key === "k") && onNavigate) {
+        const list =
+          navTaskIds && navTaskIds.length > 0
+            ? navTaskIds
+            : allTasks
+                .filter((t) => t.projectId === task.projectId)
+                .map((t) => t.id);
+        const idx = list.indexOf(task.id);
+        if (idx === -1) return;
+        const next =
+          e.key === "j"
+            ? list[(idx + 1) % list.length]
+            : list[(idx - 1 + list.length) % list.length];
+        if (next) {
+          e.preventDefault();
+          onNavigate(next);
+        }
+      } else if (e.key === "e") {
+        e.preventDefault();
+        setEditingTitle(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [task, allTasks, navTaskIds, onNavigate]);
 
   const commitTitle = () => {
     if (!task) return;

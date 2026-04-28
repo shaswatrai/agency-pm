@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { KanbanBoard } from "@/components/views/KanbanBoard";
 import { TaskDetailDrawer } from "@/components/views/TaskDetailDrawer";
 import { useStore } from "@/lib/db/store";
-import type { TaskStatus } from "@/lib/design/tokens";
+import { applyTaskFilter, useFilterFor } from "@/lib/db/filters";
+import { KANBAN_COLUMNS, type TaskStatus } from "@/lib/design/tokens";
 import { toast } from "sonner";
 
 export default function KanbanPage() {
@@ -14,6 +15,25 @@ export default function KanbanPage() {
   const projectId = params.projectId;
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const addTask = useStore((s) => s.addTask);
+  const allTasks = useStore((s) => s.tasks);
+  const filter = useFilterFor(projectId);
+
+  // Build the j/k cycle order matching what's displayed on the board
+  // (filtered + sorted by column then position).
+  const navIds = useMemo(() => {
+    const filtered = applyTaskFilter(
+      allTasks.filter((t) => t.projectId === projectId),
+      filter,
+    );
+    const ordered: string[] = [];
+    for (const col of KANBAN_COLUMNS) {
+      const inCol = filtered
+        .filter((t) => t.status === col)
+        .sort((a, b) => a.position - b.position);
+      for (const t of inCol) ordered.push(t.id);
+    }
+    return ordered;
+  }, [allTasks, projectId, filter]);
 
   useEffect(() => {
     const queryTask = searchParams.get("task");
@@ -51,6 +71,8 @@ export default function KanbanPage() {
       <TaskDetailDrawer
         taskId={openTaskId}
         onClose={() => setOpenTaskId(null)}
+        navTaskIds={navIds}
+        onNavigate={setOpenTaskId}
       />
     </div>
   );

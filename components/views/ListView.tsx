@@ -24,8 +24,10 @@ import {
 import type { Task } from "@/types/domain";
 import { useStore } from "@/lib/db/store";
 import { applyTaskFilter, useFilterFor } from "@/lib/db/filters";
-import { StatusPill } from "@/components/pills/StatusPill";
-import { PriorityPill } from "@/components/pills/PriorityPill";
+import {
+  InlineStatusPicker,
+  InlinePriorityPicker,
+} from "@/components/views/InlinePickers";
 import { AvatarStack } from "@/components/UserAvatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
@@ -140,7 +142,12 @@ export function ListView({ projectId, onOpenTask }: ListViewProps) {
         id: "status",
         header: "Status",
         accessorKey: "status",
-        cell: ({ row }) => <StatusPill status={row.original.status} size="sm" />,
+        cell: ({ row }) => (
+          <InlineStatusPicker
+            taskId={row.original.id}
+            status={row.original.status}
+          />
+        ),
         size: 130,
       },
       {
@@ -148,7 +155,10 @@ export function ListView({ projectId, onOpenTask }: ListViewProps) {
         header: "Priority",
         accessorKey: "priority",
         cell: ({ row }) => (
-          <PriorityPill priority={row.original.priority} size="sm" />
+          <InlinePriorityPicker
+            taskId={row.original.id}
+            priority={row.original.priority}
+          />
         ),
         size: 110,
       },
