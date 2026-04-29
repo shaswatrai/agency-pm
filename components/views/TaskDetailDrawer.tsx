@@ -40,6 +40,7 @@ import { DueDatePicker } from "@/components/views/DueDatePicker";
 import { SubtaskList } from "@/components/views/SubtaskList";
 import { DependencyPicker } from "@/components/views/DependencyPicker";
 import { SlaChip } from "@/components/views/SlaChip";
+import { FigmaFrameLink } from "@/components/integrations/FigmaFrameLink";
 import { useStore, useCurrentUser } from "@/lib/db/store";
 import { cn } from "@/lib/utils";
 import {
@@ -365,55 +366,9 @@ export function TaskDetailDrawer({
                     </section>
                   ) : null}
 
-                  {task.figmaUrl ? (
-                    <section>
-                      <h3 className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                        <ImageIcon className="size-3" /> Figma preview
-                      </h3>
-                      <div className="overflow-hidden rounded-lg border bg-muted/40">
-                        <div className="relative aspect-video w-full">
-                          <div className="absolute inset-0 grid place-items-center">
-                            <div className="flex flex-col items-center gap-3 text-center">
-                              <div className="grid size-12 place-items-center rounded-lg bg-status-review/20 text-status-review">
-                                <ImageIcon className="size-6" />
-                              </div>
-                              <div>
-                                <p className="text-sm font-medium">
-                                  Figma frame attached
-                                </p>
-                                <p className="text-xs text-muted-foreground max-w-[280px] truncate">
-                                  {task.figmaUrl}
-                                </p>
-                              </div>
-                              <a
-                                href={task.figmaUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-1 rounded-pill bg-status-review/10 px-3 py-1 text-xs font-medium text-status-review hover:bg-status-review/20"
-                              >
-                                Open in Figma{" "}
-                                <ExternalLink className="size-3" />
-                              </a>
-                            </div>
-                          </div>
-                          <div
-                            className="absolute inset-0 opacity-30"
-                            style={{
-                              background:
-                                "repeating-linear-gradient(45deg, hsl(var(--muted-foreground) / 0.1) 0 1px, transparent 1px 16px)",
-                            }}
-                          />
-                        </div>
-                        <div className="flex items-center justify-between border-t bg-card px-3 py-2 text-[11px] text-muted-foreground">
-                          <span className="inline-flex items-center gap-1">
-                            <span className="size-1.5 rounded-full bg-status-progress animate-pulse" />
-                            Live · auto-syncs comments &amp; status
-                          </span>
-                          <span className="font-mono">v3.2 · 2h ago</span>
-                        </div>
-                      </div>
-                    </section>
-                  ) : null}
+                  <section>
+                    <FigmaFrameLink task={task} />
+                  </section>
 
                     </TabsContent>
 
