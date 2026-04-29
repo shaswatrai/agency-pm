@@ -13,6 +13,14 @@ import {
   Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useStore } from "@/lib/db/store";
 import { UserAvatar } from "@/components/UserAvatar";
 import { EmptyState } from "@/components/EmptyState";
@@ -44,29 +52,55 @@ export default function FilesPage() {
   const users = useStore((s) => s.users);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<File[] | null>(null);
+  const [pendingProjectId, setPendingProjectId] = useState<string>("");
   const cfg = useRuntimeConfig();
   const connected = cfg.useSupabase && cfg.supabaseUrl && cfg.supabaseAnonKey;
 
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Project options sorted with active projects first
+  const projectOptions = [...projects].sort((a, b) => {
+    if (a.status === "active" && b.status !== "active") return -1;
+    if (b.status === "active" && a.status !== "active") return 1;
+    return a.name.localeCompare(b.name);
+  });
+
+  const openChooser = (e: React.ChangeEvent<HTMLInputElement>) => {
     const fileList = e.target.files;
     if (!fileList || fileList.length === 0) return;
     if (projects.length === 0) {
       toast.error("Create a project first to attach files");
+      if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
-    // For now, attach to the first active project. A future enhancement
-    // is a project picker per upload.
-    const targetProject =
-      projects.find((p) => p.status === "active") ?? projects[0];
+    setPendingFiles(Array.from(fileList));
+    const defaultProject =
+      projectOptions.find((p) => p.status === "active") ?? projectOptions[0];
+    setPendingProjectId(defaultProject?.id ?? "");
+  };
+
+  const closeChooser = () => {
+    setPendingFiles(null);
+    setPendingProjectId("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const confirmUpload = async () => {
+    if (!pendingFiles || !pendingProjectId) return;
+    const targetProject = projects.find((p) => p.id === pendingProjectId);
+    if (!targetProject) {
+      toast.error("Pick a project to attach to");
+      return;
+    }
     setUploading(true);
     let okCount = 0;
     let firstError: string | null = null;
-    for (const file of Array.from(fileList)) {
+    for (const file of pendingFiles) {
       const result = await uploadProjectFile(targetProject.id, file);
       if (result.ok) okCount++;
       else if (!firstError) firstError = result.message;
     }
     setUploading(false);
+    closeChooser();
     if (firstError) {
       toast.error(firstError);
     } else {
@@ -77,7 +111,6 @@ export default function FilesPage() {
           : { description: "Demo mode — file is in-memory only" },
       );
     }
-    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const handleDownload = async (storagePath: string | undefined, fileName: string) => {
@@ -128,7 +161,7 @@ export default function FilesPage() {
           ref={fileInputRef}
           type="file"
           multiple
-          onChange={handleUpload}
+          onChange={openChooser}
           className="hidden"
         />
       </motion.div>
@@ -224,6 +257,86 @@ export default function FilesPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Per-upload project chooser */}
+      <Dialog
+        open={pendingFiles !== null}
+        onOpenChange={(open) => {
+          if (!open && !uploading) closeChooser();
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Attach to project</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {pendingFiles && pendingFiles.length > 0 ? (
+              <div className="rounded-md border bg-muted/40 p-3 text-xs">
+                <p className="font-medium">
+                  {pendingFiles.length} file
+                  {pendingFiles.length === 1 ? "" : "s"} ready to upload
+                </p>
+                <ul className="mt-1.5 space-y-0.5 text-muted-foreground">
+                  {pendingFiles.slice(0, 4).map((f) => (
+                    <li key={f.name} className="truncate">
+                      • {f.name} ({bytes(f.size)})
+                    </li>
+                  ))}
+                  {pendingFiles.length > 4 ? (
+                    <li>… and {pendingFiles.length - 4} more</li>
+                  ) : null}
+                </ul>
+              </div>
+            ) : null}
+            <div>
+              <Label
+                htmlFor="upload-project"
+                className="text-[11px] uppercase tracking-wider text-muted-foreground"
+              >
+                Project
+              </Label>
+              <select
+                id="upload-project"
+                value={pendingProjectId}
+                onChange={(e) => setPendingProjectId(e.target.value)}
+                className="mt-1.5 h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                disabled={uploading}
+              >
+                {projectOptions.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} {p.status !== "active" ? `(${p.status})` : ""}
+                  </option>
+                ))}
+              </select>
+              {!connected ? (
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Demo mode — files stay in memory until you connect Supabase.
+                </p>
+              ) : null}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={closeChooser}
+              disabled={uploading}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmUpload}
+              disabled={uploading || !pendingProjectId}
+            >
+              {uploading ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Upload className="size-4" />
+              )}
+              {uploading ? "Uploading…" : "Upload"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

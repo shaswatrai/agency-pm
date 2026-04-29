@@ -93,8 +93,10 @@ interface Store {
   duplicateTask: (taskId: string) => Task | null;
   // client ops
   addClient: (client: Omit<Client, "id" | "organizationId" | "code" | "createdAt">) => Client;
+  updateClient: (clientId: string, patch: Partial<Client>) => void;
   // project ops
   addProject: (project: Omit<Project, "id" | "organizationId" | "code" | "createdAt" | "progress" | "taskCounts" | "health">) => Project;
+  updateProject: (projectId: string, patch: Partial<Project>) => void;
   // time ops
   addTimeEntry: (entry: Omit<TimeEntry, "id">) => TimeEntry;
   // comment ops
@@ -370,6 +372,25 @@ export const useStore = create<Store>((set, get) => ({
     return newClient;
   },
 
+  updateClient: (clientId, patch) => {
+    set((state) => ({
+      clients: state.clients.map((c) =>
+        c.id === clientId ? { ...c, ...patch } : c,
+      ),
+    }));
+    void import("@/lib/db/recordSync").then(({ syncClientUpdate }) =>
+      syncClientUpdate(clientId, patch),
+    );
+    void import("@/lib/db/activitySync").then(({ logActivity }) =>
+      logActivity({
+        entityType: "client",
+        entityId: clientId,
+        action: "updated",
+        metadata: { fields: Object.keys(patch) },
+      }),
+    );
+  },
+
   addProject: (project) => {
     const client = get().clients.find((c) => c.id === project.clientId);
     const seq =
@@ -406,6 +427,25 @@ export const useStore = create<Store>((set, get) => ({
       }),
     );
     return newProject;
+  },
+
+  updateProject: (projectId, patch) => {
+    set((state) => ({
+      projects: state.projects.map((p) =>
+        p.id === projectId ? { ...p, ...patch } : p,
+      ),
+    }));
+    void import("@/lib/db/recordSync").then(({ syncProjectUpdate }) =>
+      syncProjectUpdate(projectId, patch),
+    );
+    void import("@/lib/db/activitySync").then(({ logActivity }) =>
+      logActivity({
+        entityType: "project",
+        entityId: projectId,
+        action: "updated",
+        metadata: { fields: Object.keys(patch) },
+      }),
+    );
   },
 
   addTimeEntry: (entry) => {
@@ -798,6 +838,7 @@ export const useStore = create<Store>((set, get) => ({
   reviewBudgetChange: (id, status, reviewerId, reviewNote) => {
     let projectId: string | undefined;
     let delta = 0;
+    let newTotalBudget: number | undefined;
     set((state) => {
       const req = state.budgetChanges.find((r) => r.id === id);
       if (!req) return state;
@@ -810,6 +851,10 @@ export const useStore = create<Store>((set, get) => ({
           : r,
       );
       if (status === "approved") {
+        const project = state.projects.find((p) => p.id === req.projectId);
+        if (project) {
+          newTotalBudget = (project.totalBudget ?? 0) + req.delta;
+        }
         return {
           budgetChanges: nextRequests,
           projects: state.projects.map((p) =>
@@ -821,6 +866,12 @@ export const useStore = create<Store>((set, get) => ({
       }
       return { budgetChanges: nextRequests };
     });
+    if (projectId && newTotalBudget !== undefined) {
+      // Mirror the bumped budget to Postgres so refreshes / other tabs see it
+      void import("@/lib/db/recordSync").then(({ syncProjectUpdate }) =>
+        syncProjectUpdate(projectId!, { totalBudget: newTotalBudget }),
+      );
+    }
     if (projectId) {
       void import("@/lib/db/activitySync").then(({ logActivity }) =>
         logActivity({

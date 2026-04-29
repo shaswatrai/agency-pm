@@ -21,7 +21,7 @@ The user shouldn't need to set env vars to swap from demo mode to a real backend
 - ✅ Data adapter stub (`lib/db/adapter.ts`) — exposes `useBackendMode()` so future code can branch
 - ✅ This roadmap doc
 
-## Pass 2 — Real auth & persistence (the spine) [chunk 1 of 4 done]
+## Pass 2 — Real auth & persistence (the spine) [chunks 1–5 done]
 
 Goal: enable Connected mode to actually persist data.
 
@@ -71,12 +71,17 @@ Goal: enable Connected mode to actually persist data.
 - ✅ **Supabase Storage uploads** (`lib/db/fileSync.ts`): per-project bucket `project-files/<orgId>/<projectId>/<fileId>-<name>`, real upload from the Files page (multi-file picker, loading spinner), `files` table row insert, signed-URL downloads (1-hour TTL). Bucket declared in `supabase/config.toml`. Hydration pulls existing `files` rows on Connected mode.
 - ✅ **SSR session gating** (`proxy.ts`, the renamed-from-middleware Next.js 16 convention): `/[orgSlug]/*` paths require a Supabase auth cookie when `atelier-mode=supabase` is set. Demo mode passes through. Public paths (`/login`, `/signup`, `/accept-invite`, `/share`, `/portal`, `/api/*`) skip the gate. Connections panel writes / clears the `atelier-mode` cookie when toggling Connected mode + on Reset.
 
-**Remaining (chunk 5):**
+**Done in chunk 5 (full):**
 
-- ⛔ Update flows for projects / clients / phases dual-written (inserts done)
-- ⛔ Quotes / invoices / automations / automation_runs / timesheet submissions / FX / budget changes / user skills tables added to the migration (these slices are still in-memory only)
-- ⛔ Per-project file scoping in the Files page UI (today the upload picks the first active project; needs a project chooser per upload)
-- ⛔ Tighter Storage RLS policies (today the `project-files` bucket is private but objects are visible to any authenticated user; restrict to org members)
+- ✅ Migration `0003_remaining_slices.sql` adds Postgres tables for every previously in-memory-only slice: `quotes` (header) + `quote_versions` (jsonb line items), `invoices` (header + jsonb line items), `automations`, `automation_runs`, `timesheet_submissions`, `fx_rates` (per-org currency table) + `organizations.base_currency`, `budget_change_requests`, `user_skills`, `time_tracking_configs`. All tenant-scoped via `is_member_of()` RLS, with role-gated writes for automations / FX / time-tracking config.
+- ✅ `updateClient` + `updateProject` mutations on the Zustand store, wired through to `recordSync.syncClientUpdate` / `syncProjectUpdate` and emit `client.updated` / `project.updated` activity entries.
+- ✅ `reviewBudgetChange` now mirrors the bumped `total_budget` to Postgres on approval (was previously only updating the in-memory project row).
+- ✅ Per-project chooser dialog on the Files page — picking files opens a modal where the user selects which project to attach to (defaults to first active, sorted active-first then alphabetical) before the upload kicks off. Demo / Connected hint appears inline.
+- ✅ **Tighter Storage RLS** — `project-files` policies switched from "any authenticated user" to org-membership checks against the first path segment (`<orgId>/...`), using the existing `is_member_of(uuid)` helper. Read / upload / delete all gated.
+
+**Deferred for later passes** (not strictly Pass 2 anymore):
+
+- 🟡 Hydration of the new slices into the in-memory store on Connected boot (today the migration just creates the tables; pulling them into Zustand happens when each feature page is wired to live Postgres data — picked up alongside the Pass 7 backfill of dual-writes for `addInvoice` / `addQuote` / `toggleAutomation` / `setTimesheetStatus` / `setUserSkill` / `setFxRate` / `setTimeTrackingConfig`)
 
 ## Pass 3 — Phase 2 finish (financial) [DONE]
 
