@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { Plus, Search, Mail, Globe, ArrowRight } from "lucide-react";
@@ -29,6 +29,7 @@ const STATUS_LABEL: Record<ClientStatus, { label: string; cls: string }> = {
 };
 
 export default function ClientsPage() {
+  const router = useRouter();
   const clients = useStore((s) => s.clients);
   const projects = useStore((s) => s.projects);
   const orgSlug = useStore((s) => s.organization.slug);
@@ -91,9 +92,17 @@ export default function ClientsPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.04, duration: 0.24 }}
             >
-              <Link
-                href={`/${orgSlug}/clients/${client.id}`}
-                className="group flex h-full flex-col rounded-lg border bg-card p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+              <div
+                role="link"
+                tabIndex={0}
+                onClick={() => router.push(`/${orgSlug}/clients/${client.id}`)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    router.push(`/${orgSlug}/clients/${client.id}`);
+                  }
+                }}
+                className="group flex h-full cursor-pointer flex-col rounded-lg border bg-card p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <div className="flex items-start gap-3">
                   <div
@@ -176,7 +185,7 @@ export default function ClientsPage() {
                 <div className="mt-3 flex items-center text-xs font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100">
                   View detail <ArrowRight className="ml-1 size-3" />
                 </div>
-              </Link>
+              </div>
             </motion.div>
           );
         })}
