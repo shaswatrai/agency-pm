@@ -29,6 +29,8 @@ import type {
   BudgetChangeStatus,
   Client,
   Comment,
+  CustomReport,
+  ReportConfig,
   FxRate,
   Invoice,
   InvoiceLineItem,
@@ -276,6 +278,33 @@ export async function hydrateFromSupabase(
     .from("user_skills")
     .select("*")
     .eq("organization_id", orgId);
+
+  // 16d. Custom reports
+  const { data: reportsRaw } = await supabase
+    .from("custom_reports")
+    .select("*")
+    .eq("organization_id", orgId)
+    .order("created_at", { ascending: false });
+  type DbCustomReport = {
+    id: string;
+    organization_id: string;
+    name: string;
+    description: string | null;
+    config: ReportConfig;
+    created_by: string | null;
+    created_at: string;
+  };
+  const customReports: CustomReport[] = (
+    (reportsRaw ?? []) as DbCustomReport[]
+  ).map((r) => ({
+    id: r.id,
+    organizationId: r.organization_id,
+    name: r.name,
+    description: r.description ?? undefined,
+    config: r.config,
+    createdBy: r.created_by ?? undefined,
+    createdAt: r.created_at,
+  }));
 
   // 16c. SLA policies
   const { data: slaRaw } = await supabase
@@ -834,6 +863,7 @@ export async function hydrateFromSupabase(
     taskDependencies,
     recurringRules,
     slaPolicies,
+    customReports,
   }));
 
   return {
@@ -857,6 +887,7 @@ export async function hydrateFromSupabase(
       taskDependencies: taskDependencies.length,
       recurringRules: recurringRules.length,
       slaPolicies: slaPolicies.length,
+      customReports: customReports.length,
     },
   };
 }

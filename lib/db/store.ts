@@ -32,6 +32,7 @@ import type {
   BudgetChangeStatus,
   Client,
   Comment,
+  CustomReport,
   DependencyType,
   FxRate,
   Invoice,
@@ -68,6 +69,7 @@ interface Store {
   taskDependencies: TaskDependency[];
   recurringRules: RecurringTaskRule[];
   slaPolicies: SlaPolicy[];
+  customReports: CustomReport[];
   invoices: Invoice[];
   automations: AutomationRule[];
   automationRuns: AutomationRun[];
@@ -121,6 +123,15 @@ interface Store {
   ) => SlaPolicy;
   updateSlaPolicy: (id: string, patch: Partial<SlaPolicy>) => void;
   removeSlaPolicy: (id: string) => void;
+  // custom reports
+  addCustomReport: (
+    report: Omit<CustomReport, "id" | "organizationId" | "createdAt">,
+  ) => CustomReport;
+  updateCustomReport: (
+    id: string,
+    patch: Partial<CustomReport>,
+  ) => void;
+  removeCustomReport: (id: string) => void;
   // client ops
   addClient: (client: Omit<Client, "id" | "organizationId" | "code" | "createdAt">) => Client;
   updateClient: (clientId: string, patch: Partial<Client>) => void;
@@ -215,6 +226,7 @@ export const useStore = create<Store>((set, get) => ({
   taskDependencies: [],
   recurringRules: [],
   slaPolicies: [],
+  customReports: [],
   invoices: INVOICES,
   automations: AUTOMATIONS,
   automationRuns: [],
@@ -567,6 +579,43 @@ export const useStore = create<Store>((set, get) => ({
     set((s) => ({ slaPolicies: s.slaPolicies.filter((p) => p.id !== id) }));
     void import("@/lib/db/recordSync").then(({ syncSlaPolicyDelete }) =>
       syncSlaPolicyDelete(id),
+    );
+  },
+
+  addCustomReport: (report) => {
+    const newReport: CustomReport = {
+      ...report,
+      id: uuidOrFallback("rpt"),
+      organizationId: get().organization.id,
+      createdAt: new Date().toISOString(),
+    };
+    set((s) => ({ customReports: [newReport, ...s.customReports] }));
+    void import("@/lib/db/recordSync").then(({ syncCustomReportUpsert }) =>
+      syncCustomReportUpsert(newReport),
+    );
+    return newReport;
+  },
+
+  updateCustomReport: (id, patch) => {
+    set((s) => ({
+      customReports: s.customReports.map((r) =>
+        r.id === id ? { ...r, ...patch } : r,
+      ),
+    }));
+    const updated = get().customReports.find((r) => r.id === id);
+    if (updated) {
+      void import("@/lib/db/recordSync").then(({ syncCustomReportUpsert }) =>
+        syncCustomReportUpsert(updated),
+      );
+    }
+  },
+
+  removeCustomReport: (id) => {
+    set((s) => ({
+      customReports: s.customReports.filter((r) => r.id !== id),
+    }));
+    void import("@/lib/db/recordSync").then(({ syncCustomReportDelete }) =>
+      syncCustomReportDelete(id),
     );
   },
 

@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
-import { motion } from "framer-motion";
+import { useMemo, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   TrendingUp,
   TrendingDown,
@@ -10,6 +10,9 @@ import {
   Receipt,
   Zap,
   Download,
+  Pencil,
+  Trash2,
+  Sparkles,
 } from "lucide-react";
 import { useStore } from "@/lib/db/store";
 import { useBaseConverter, formatCurrencyAmount } from "@/lib/db/fx";
@@ -19,6 +22,13 @@ import { LineChart } from "@/components/charts/LineChart";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import {
+  ReportBuilder,
+  ReportRenderer,
+} from "@/components/reports/ReportBuilder";
+import { runReport } from "@/lib/reports/runner";
+import type { CustomReport } from "@/types/domain";
 
 export default function ReportsPage() {
   const projects = useStore((s) => s.projects);
@@ -27,7 +37,16 @@ export default function ReportsPage() {
   const invoices = useStore((s) => s.invoices);
   const users = useStore((s) => s.users);
   const clients = useStore((s) => s.clients);
+  const customReports = useStore((s) => s.customReports);
+  const removeCustomReport = useStore((s) => s.removeCustomReport);
   const { baseCurrency, convert } = useBaseConverter();
+  const [builderOpen, setBuilderOpen] = useState(false);
+  const [editingReport, setEditingReport] = useState<CustomReport | null>(null);
+
+  const reportInputs = useMemo(
+    () => ({ tasks, timeEntries, projects, invoices, clients }),
+    [tasks, timeEntries, projects, invoices, clients],
+  );
 
   // Profitability per active project — values converted to base currency
   const profitability = useMemo(() => {
@@ -149,10 +168,26 @@ export default function ReportsPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (typeof window !== "undefined") window.print();
+              toast.info("Use the browser's Save as PDF in the print dialog");
+            }}
+          >
             <Download className="size-4" /> Export PDF
           </Button>
-          <Button size="sm">Custom report</Button>
+          <Button
+            size="sm"
+            onClick={() => {
+              setEditingReport(null);
+              setBuilderOpen(true);
+            }}
+          >
+            <Sparkles className="size-4" />
+            Custom report
+          </Button>
         </div>
       </motion.div>
 
@@ -483,6 +518,95 @@ export default function ReportsPage() {
           </div>
         </Card>
       </div>
+
+      {/* Custom reports */}
+      {customReports.length > 0 ? (
+        <div className="mt-8">
+          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+            <Sparkles className="size-4 text-primary" />
+            Custom reports
+          </h2>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <AnimatePresence initial={false}>
+              {customReports.map((report) => {
+                const result = runReport(report.config, reportInputs);
+                return (
+                  <motion.div
+                    key={report.id}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, height: 0 }}
+                  >
+                    <Card className="p-4">
+                      <div className="mb-3 flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold">{report.name}</p>
+                          {report.description ? (
+                            <p className="mt-0.5 text-[11px] text-muted-foreground">
+                              {report.description}
+                            </p>
+                          ) : (
+                            <p className="mt-0.5 text-[11px] text-muted-foreground">
+                              {report.config.source} ·{" "}
+                              {report.config.measure.kind}
+                              {report.config.groupBy
+                                ? ` by ${report.config.groupBy}`
+                                : ""}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => {
+                              setEditingReport(report);
+                              setBuilderOpen(true);
+                            }}
+                          >
+                            <Pencil className="size-3.5 text-muted-foreground" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => {
+                              if (
+                                confirm(`Delete report "${report.name}"?`)
+                              ) {
+                                removeCustomReport(report.id);
+                                toast.success("Report deleted");
+                              }
+                            }}
+                          >
+                            <Trash2 className="size-3.5 text-muted-foreground" />
+                          </Button>
+                        </div>
+                      </div>
+                      <ReportRenderer
+                        config={report.config}
+                        result={result}
+                        users={users}
+                        inputs={reportInputs}
+                      />
+                    </Card>
+                  </motion.div>
+                );
+              })}
+            </AnimatePresence>
+          </div>
+        </div>
+      ) : null}
+
+      <ReportBuilder
+        open={builderOpen}
+        onOpenChange={(o) => {
+          setBuilderOpen(o);
+          if (!o) setEditingReport(null);
+        }}
+        editingReport={editingReport}
+      />
     </div>
   );
 }

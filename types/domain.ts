@@ -223,6 +223,63 @@ export interface SlaIncidentSnapshot {
   hoursToNextDeadline: number;
 }
 
+// ----------------------------------------------------------------------------
+// Custom reports (PRD §5.13)
+// ----------------------------------------------------------------------------
+export type ReportSource =
+  | "tasks"
+  | "time_entries"
+  | "projects"
+  | "invoices"
+  | "clients";
+
+export type ReportMeasure =
+  | { kind: "count" }
+  | { kind: "sum"; field: string }
+  | { kind: "avg"; field: string };
+
+export type ReportFilterOp =
+  | "eq"
+  | "neq"
+  | "in"
+  | "gt"
+  | "gte"
+  | "lt"
+  | "lte"
+  | "contains";
+
+export interface ReportFilter {
+  field: string;
+  op: ReportFilterOp;
+  /** primitive or array (for `in`); strings/numbers/booleans only */
+  value: string | number | boolean | (string | number)[];
+}
+
+export type ReportVisual = "table" | "bar" | "kpi";
+
+export interface ReportConfig {
+  source: ReportSource;
+  /** Field to group rows by — undefined for "kpi" / no-grouping. */
+  groupBy?: string;
+  measure: ReportMeasure;
+  filters: ReportFilter[];
+  visual: ReportVisual;
+  /** Sort direction on the measure */
+  sortDir?: "asc" | "desc";
+  /** Cap of rows shown */
+  limit?: number;
+}
+
+export interface CustomReport {
+  id: string;
+  organizationId: string;
+  name: string;
+  description?: string;
+  config: ReportConfig;
+  createdBy?: string;
+  createdAt: string;
+}
+
 export interface RecurringTaskRule {
   id: string;
   organizationId: string;

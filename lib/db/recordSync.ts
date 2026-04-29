@@ -19,6 +19,7 @@ import type {
   BudgetChangeStatus,
   Client,
   Comment,
+  CustomReport,
   FxRate,
   Invoice,
   InvoiceStatus,
@@ -637,6 +638,33 @@ export async function syncRecurringRuleDelete(id: string): Promise<void> {
     .delete()
     .eq("id", id);
   warn("Recurring rule delete", error);
+}
+
+// ── Custom reports ────────────────────────────────────────────────────
+export async function syncCustomReportUpsert(
+  report: CustomReport,
+): Promise<void> {
+  const supabase = getClient();
+  if (!supabase) return;
+  const { error } = await supabase.from("custom_reports").upsert({
+    id: report.id,
+    organization_id: report.organizationId,
+    name: report.name,
+    description: report.description ?? null,
+    config: report.config,
+    created_by: report.createdBy ?? null,
+  });
+  warn("Custom report upsert", error);
+}
+
+export async function syncCustomReportDelete(id: string): Promise<void> {
+  const supabase = getClient();
+  if (!supabase) return;
+  const { error } = await supabase
+    .from("custom_reports")
+    .delete()
+    .eq("id", id);
+  warn("Custom report delete", error);
 }
 
 // ── SLA policies ──────────────────────────────────────────────────────
