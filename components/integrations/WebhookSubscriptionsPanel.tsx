@@ -28,6 +28,7 @@ import { useIntegrationsStore } from "@/lib/integrations/store";
 import { useStore } from "@/lib/db/store";
 import { flushDueDeliveries } from "@/lib/integrations/webhooks/worker";
 import { INTEGRATION_EVENT_TYPES } from "@/types/domain";
+import { IntegrationRecipes } from "@/components/integrations/IntegrationRecipes";
 import { toast } from "sonner";
 
 export function WebhookSubscriptionsPanel() {
@@ -100,11 +101,13 @@ export function WebhookSubscriptionsPanel() {
         </div>
       </div>
 
+      <IntegrationRecipes />
+
       {orgSubs.length === 0 ? (
         <div className="rounded-md border border-dashed bg-muted/20 px-4 py-8 text-center">
           <p className="text-sm font-medium">No subscriptions yet</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Add a target URL + secret to start fanning Atelier events out.
+            Pick a recipe above or add a custom target URL.
           </p>
         </div>
       ) : (
