@@ -3,11 +3,15 @@ import type { ProviderClient } from "./base";
 import { figmaClient } from "./figma/client";
 import { githubClient } from "./github/client";
 import { gitlabClient } from "./gitlab/client";
+import { slackClient } from "./slack/client";
+import { teamsClient } from "./microsoft_teams/client";
 
 const REGISTRY: Partial<Record<IntegrationProviderKind, ProviderClient>> = {
   figma: figmaClient,
   github: githubClient,
   gitlab: gitlabClient,
+  slack: slackClient,
+  microsoft_teams: teamsClient,
 };
 
 /**
