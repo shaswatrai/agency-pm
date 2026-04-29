@@ -42,15 +42,24 @@ Goal: enable Connected mode to actually persist data.
 - ✅ Real `signOut` wired to the topbar avatar dropdown
 - ✅ **Task mutations dual-write to Postgres** (addTask / updateTask / moveTask / removeTask / duplicateTask) — instant Zustand update + best-effort `lib/db/taskSync.ts` mirror. Task IDs are now real UUIDs.
 
+**Done in chunk 2 (other slices dual-write):**
+
+- ✅ `lib/db/recordSync.ts` — generic per-slice insert/update helpers (clients, projects, phases, comments, time entries, plus a tasks bulk-insert for quote-conversion)
+- ✅ `addClient` / `addProject` / `addComment` / `addTimeEntry` mirror to Postgres on every call; entity IDs are now real UUIDs
+- ✅ `convertQuoteToProject` dual-writes the project + phases + tasks atomically (project first → phases → tasks bulk insert)
+- ✅ Hydration extended to fetch `comments` + `time_entries` from Postgres; recomputes `task.commentCount` and `task.actualHours` from real rows
+- ✅ Demo seed extended: comments + time entries on first signup populate the `My Tasks` and `Timesheet` pages with real data the user can build on
+
 **Remaining chunks:**
 
-- ⛔ **Chunk 2 — other slices dual-write**: projects, clients, phases, comments, time entries follow the same pattern
 - ⛔ **Chunk 3 — Realtime**: `supabase.channel(...)` subscriptions on `tasks` + `comments` + `time_entries` replace the `BroadcastChannel` transport
 - ⛔ **Chunk 4 — Storage + emails + activity log + SSR session**:
   - File uploads land in Supabase Storage with the per-project bucket pattern
   - Real Resend sends fire on: invite, mention, milestone-approved, invoice sent
   - Activity log auto-generated on every server action; dashboard + project Activity tab read it
   - SSR cookie middleware gates `/[orgSlug]/*` (today the gating is client-side only)
+- ⛔ Dual-write update flows for projects / clients (currently inserts only)
+- ⛔ Quotes / invoices / automations / timesheet submissions / FX / budget changes / skills tables in the migration (today these slices are still in-memory only)
 
 ## Pass 3 — Phase 2 finish (financial) [DONE]
 

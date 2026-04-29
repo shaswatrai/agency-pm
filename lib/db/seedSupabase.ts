@@ -21,6 +21,8 @@ import {
   PROJECTS,
   PHASES,
   TASKS,
+  COMMENTS,
+  TIME_ENTRIES,
 } from "@/lib/db/seed";
 
 const ID_PREFIX_LEN = 8; // map "p_lumiere_site" → unique uuid via Math.random; we store originals as natural keys via codes
@@ -155,6 +157,44 @@ export async function seedDemoIntoOrg(
     if (aErr) throw new Error(`task_assignees: ${aErr.message}`);
   }
 
+  // ── Comments (only on tasks the seed has comments for, and only
+  //    those whose task survived; current user becomes the author) ───
+  const commentRows = COMMENTS.filter((c) => taskIdMap.has(c.taskId)).map(
+    (c) => ({
+      id: newId(),
+      organization_id: orgId,
+      task_id: taskIdMap.get(c.taskId)!,
+      author_id: userId,
+      body: c.body,
+    }),
+  );
+  if (commentRows.length > 0) {
+    const { error: cErr } = await supabase
+      .from("comments")
+      .insert(commentRows);
+    if (cErr) throw new Error(`comments: ${cErr.message}`);
+  }
+
+  // ── Time entries (current user is the worker) ─────────────────────
+  const timeRows = TIME_ENTRIES.filter((e) => taskIdMap.has(e.taskId)).map(
+    (e) => ({
+      id: newId(),
+      organization_id: orgId,
+      task_id: taskIdMap.get(e.taskId)!,
+      user_id: userId,
+      entry_date: e.date,
+      duration_minutes: e.durationMinutes,
+      description: e.description,
+      billable: e.billable,
+    }),
+  );
+  if (timeRows.length > 0) {
+    const { error: tErr } = await supabase
+      .from("time_entries")
+      .insert(timeRows);
+    if (tErr) throw new Error(`time_entries: ${tErr.message}`);
+  }
+
   return {
     orgId,
     counts: {
@@ -162,6 +202,8 @@ export async function seedDemoIntoOrg(
       projects: projectRows.length,
       phases: phaseRows.length,
       tasks: taskRows.length,
+      comments: commentRows.length,
+      time_entries: timeRows.length,
     },
   };
 }

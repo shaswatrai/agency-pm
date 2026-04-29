@@ -19,9 +19,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { useStore } from "@/lib/db/store";
 import type {
   Client,
+  Comment,
   Phase,
   Project,
   Task,
+  TimeEntry,
   User,
   OrgRole,
 } from "@/types/domain";
@@ -168,6 +170,21 @@ export async function hydrateFromSupabase(
     .eq("organization_id", orgId);
   if (taskErr) return { ok: false, message: `tasks: ${taskErr.message}` };
 
+  // 7. Comments
+  const { data: commentsRaw, error: comErr } = await supabase
+    .from("comments")
+    .select("*")
+    .eq("organization_id", orgId)
+    .order("created_at", { ascending: true });
+  if (comErr) return { ok: false, message: `comments: ${comErr.message}` };
+
+  // 8. Time entries
+  const { data: timeRaw, error: timeErr } = await supabase
+    .from("time_entries")
+    .select("*")
+    .eq("organization_id", orgId);
+  if (timeErr) return { ok: false, message: `time_entries: ${timeErr.message}` };
+
   // ── Map DB rows → in-memory shapes ────────────────────────────────
   const users: User[] = members.map((m) => ({
     id: m.user_id,
@@ -273,6 +290,58 @@ export async function hydrateFromSupabase(
     };
   });
 
+  // Comments
+  const dbComments = (commentsRaw ?? []) as Array<{
+    id: string;
+    task_id: string;
+    parent_comment_id: string | null;
+    author_id: string;
+    body: string;
+    created_at: string;
+  }>;
+  const comments: Comment[] = dbComments.map((c) => ({
+    id: c.id,
+    taskId: c.task_id,
+    parentCommentId: c.parent_comment_id ?? undefined,
+    authorId: c.author_id,
+    body: c.body,
+    createdAt: c.created_at,
+  }));
+
+  // Time entries
+  const dbTimes = (timeRaw ?? []) as Array<{
+    id: string;
+    task_id: string;
+    user_id: string;
+    entry_date: string;
+    duration_minutes: number;
+    description: string | null;
+    billable: boolean;
+  }>;
+  const timeEntries: TimeEntry[] = dbTimes.map((e) => ({
+    id: e.id,
+    taskId: e.task_id,
+    userId: e.user_id,
+    date: e.entry_date,
+    durationMinutes: e.duration_minutes,
+    description: e.description ?? "",
+    billable: e.billable,
+  }));
+
+  // Recompute comment + attachment counts on tasks from real data
+  const taskCommentCount = new Map<string, number>();
+  for (const c of comments) {
+    taskCommentCount.set(c.taskId, (taskCommentCount.get(c.taskId) ?? 0) + 1);
+  }
+  const enrichedTasks = tasks.map((t) => ({
+    ...t,
+    commentCount: taskCommentCount.get(t.id) ?? 0,
+    actualHours:
+      timeEntries
+        .filter((e) => e.taskId === t.id)
+        .reduce((s, e) => s + e.durationMinutes, 0) / 60,
+  }));
+
   useStore.setState((state) => ({
     organization: { id: org.id, slug: org.slug, name: org.name },
     currentUserId,
@@ -280,10 +349,9 @@ export async function hydrateFromSupabase(
     clients,
     projects: enrichedProjects,
     phases,
-    tasks,
-    // Reset transient slices that aren't in the migration yet
-    comments: [],
-    timeEntries: [],
+    tasks: enrichedTasks,
+    comments,
+    timeEntries,
     files: [],
   }));
 
@@ -296,6 +364,8 @@ export async function hydrateFromSupabase(
       projects: projects.length,
       phases: phases.length,
       tasks: tasks.length,
+      comments: comments.length,
+      timeEntries: timeEntries.length,
     },
   };
 }

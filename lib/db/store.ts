@@ -147,6 +147,18 @@ interface Store {
 let counter = 1000;
 const nextId = (prefix: string) => `${prefix}_${++counter}`;
 
+/**
+ * Generate a UUID for entities that get persisted to Postgres.
+ * Falls back to the legacy `prefix_<n>` format for SSR or browsers
+ * without crypto.randomUUID.
+ */
+function uuidOrFallback(prefix: string) {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return nextId(prefix);
+}
+
 export const useStore = create<Store>((set, get) => ({
   organization: ORG,
   currentUserId: CURRENT_USER_ID,
@@ -270,14 +282,18 @@ export const useStore = create<Store>((set, get) => ({
 
   addClient: (client) => {
     const seq = get().clients.length + 1;
+    const id = uuidOrFallback("c");
     const newClient: Client = {
       ...client,
-      id: nextId("c"),
-      organizationId: ORG.id,
+      id,
+      organizationId: get().organization.id,
       code: `${client.name.slice(0, 3).toUpperCase()}-${String(seq).padStart(3, "0")}`,
       createdAt: new Date().toISOString(),
     };
     set((state) => ({ clients: [...state.clients, newClient] }));
+    void import("@/lib/db/recordSync").then(({ syncClientInsert }) =>
+      syncClientInsert(newClient),
+    );
     return newClient;
   },
 
@@ -293,10 +309,11 @@ export const useStore = create<Store>((set, get) => ({
       maintenance: "MTN",
       other: "PRJ",
     }[project.type];
+    const id = uuidOrFallback("p");
     const newProject: Project = {
       ...project,
-      id: nextId("p"),
-      organizationId: ORG.id,
+      id,
+      organizationId: get().organization.id,
       code: `${client?.code ?? "CLT"}-${typeAbbr}-${String(seq).padStart(3, "0")}`,
       createdAt: new Date().toISOString(),
       progress: 0,
@@ -304,24 +321,38 @@ export const useStore = create<Store>((set, get) => ({
       health: "green",
     };
     set((state) => ({ projects: [...state.projects, newProject] }));
+    void import("@/lib/db/recordSync").then(({ syncProjectInsert }) =>
+      syncProjectInsert(newProject),
+    );
     return newProject;
   },
 
   addTimeEntry: (entry) => {
-    const newEntry: TimeEntry = { ...entry, id: nextId("te") };
+    const newEntry: TimeEntry = {
+      ...entry,
+      id: uuidOrFallback("te"),
+    };
     set((state) => ({ timeEntries: [...state.timeEntries, newEntry] }));
+    const orgId = get().organization.id;
+    void import("@/lib/db/recordSync").then(({ syncTimeEntryInsert }) =>
+      syncTimeEntryInsert(newEntry, orgId),
+    );
     return newEntry;
   },
 
   addComment: (taskId, body) => {
     const newComment: Comment = {
-      id: nextId("cm"),
+      id: uuidOrFallback("cm"),
       taskId,
       authorId: get().currentUserId,
       body,
       createdAt: new Date().toISOString(),
     };
     set((state) => ({ comments: [...state.comments, newComment] }));
+    const orgId = get().organization.id;
+    void import("@/lib/db/recordSync").then(({ syncCommentInsert }) =>
+      syncCommentInsert(newComment, orgId),
+    );
     return newComment;
   },
 
@@ -445,10 +476,11 @@ export const useStore = create<Store>((set, get) => ({
       maintenance: "MTN",
       other: "PRJ",
     }[quote.type];
-    const projectId = nextId("p");
+    const projectId = uuidOrFallback("p");
+    const orgId = state.organization.id;
     const project: Project = {
       id: projectId,
-      organizationId: ORG.id,
+      organizationId: orgId,
       clientId: quote.clientId,
       code: `${client.code}-${typeAbbr}-${String(seq).padStart(3, "0")}`,
       name: quote.name,
@@ -474,7 +506,7 @@ export const useStore = create<Store>((set, get) => ({
     };
 
     const phases: Phase[] = categories.map((name, i) => ({
-      id: `${projectId}_phase_${i + 1}`,
+      id: uuidOrFallback("ph"),
       projectId,
       name,
       position: i + 1,
@@ -484,8 +516,8 @@ export const useStore = create<Store>((set, get) => ({
     const tasks: Task[] = version.lineItems.map((line, i) => {
       const phase = phases.find((p) => p.name === line.category)!;
       return {
-        id: nextId("t"),
-        organizationId: ORG.id,
+        id: uuidOrFallback("t"),
+        organizationId: orgId,
         projectId,
         phaseId: phase.id,
         code: `${project.code}-T${String(i + 1).padStart(3, "0")}`,
@@ -526,6 +558,14 @@ export const useStore = create<Store>((set, get) => ({
           : q,
       ),
     }));
+
+    // Dual-write to Postgres in order: project → phases → tasks
+    void (async () => {
+      const recordSync = await import("@/lib/db/recordSync");
+      await recordSync.syncProjectInsert(project);
+      await recordSync.syncPhasesInsert(phases, orgId);
+      await recordSync.syncTasksInsert(tasks);
+    })();
 
     return project;
   },
