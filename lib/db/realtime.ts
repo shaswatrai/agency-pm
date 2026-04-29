@@ -9,6 +9,8 @@
  *   - comments (INSERT)
  *   - time_entries (INSERT)
  *   - task_assignees (INSERT / DELETE)
+ *   - activity_log (INSERT) — drives the dashboard live activity feed
+ *   - files (INSERT) — multi-user upload sync
  *
  * Echo dedupe: when the local tab dual-writes a row, that row arrives
  * back via realtime. We compare the incoming row to the local store and
@@ -20,7 +22,9 @@ import type {
 } from "@supabase/supabase-js";
 import { useStore } from "@/lib/db/store";
 import type {
+  ActivityEvent,
   Comment,
+  ProjectFile,
   Task,
   TimeEntry,
 } from "@/types/domain";
@@ -68,6 +72,32 @@ interface DbTimeEntry {
   duration_minutes: number;
   description: string | null;
   billable: boolean;
+}
+
+interface DbActivity {
+  id: string;
+  organization_id: string;
+  actor_id: string | null;
+  entity_type: ActivityEvent["entityType"];
+  entity_id: string;
+  action: string;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
+interface DbFile {
+  id: string;
+  organization_id: string;
+  project_id: string;
+  task_id: string | null;
+  storage_path: string;
+  file_name: string;
+  mime_type: string | null;
+  size_bytes: number;
+  version: number;
+  uploaded_by: string | null;
+  client_visible: boolean;
+  created_at: string;
 }
 
 function dbTaskToLocal(row: DbTask): Task {
@@ -234,6 +264,65 @@ export function startRealtime(supabase: SupabaseClient, orgId: string) {
                   }
                 : t,
             ),
+          };
+        });
+      },
+    )
+    // Activity log: INSERT — feeds the dashboard activity feed across users
+    .on(
+      "postgres_changes" as unknown as never,
+      { event: "INSERT", schema: "public", table: "activity_log" },
+      (payload: { new: DbActivity }) => {
+        const row = payload.new;
+        if (row.organization_id !== orgId) return;
+        const event: ActivityEvent = {
+          id: row.id,
+          actorId: row.actor_id ?? undefined,
+          entityType: row.entity_type,
+          entityId: row.entity_id,
+          action: row.action,
+          metadata: row.metadata ?? undefined,
+          createdAt: row.created_at,
+        };
+        useStore.setState((state) => {
+          if (state.activityEvents.some((e) => e.id === event.id)) return state;
+          return {
+            activityEvents: [event, ...state.activityEvents].slice(0, 200),
+          };
+        });
+      },
+    )
+    // Files: INSERT — multi-user upload sync on Files page + task drawer
+    .on(
+      "postgres_changes" as unknown as never,
+      { event: "INSERT", schema: "public", table: "files" },
+      (payload: { new: DbFile }) => {
+        const row = payload.new;
+        if (row.organization_id !== orgId) return;
+        const incoming: ProjectFile = {
+          id: row.id,
+          projectId: row.project_id,
+          taskId: row.task_id ?? undefined,
+          fileName: row.file_name,
+          mimeType: row.mime_type ?? undefined,
+          sizeBytes: row.size_bytes,
+          version: row.version,
+          uploadedBy: row.uploaded_by ?? undefined,
+          clientVisible: row.client_visible,
+          createdAt: row.created_at,
+          storagePath: row.storage_path,
+        };
+        useStore.setState((state) => {
+          if (state.files.some((f) => f.id === incoming.id)) return state;
+          return {
+            files: [...state.files, incoming],
+            tasks: incoming.taskId
+              ? state.tasks.map((t) =>
+                  t.id === incoming.taskId
+                    ? { ...t, attachmentCount: t.attachmentCount + 1 }
+                    : t,
+                )
+              : state.tasks,
           };
         });
       },

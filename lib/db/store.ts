@@ -214,6 +214,8 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   updateTask: (taskId, patch) => {
+    const prevTask = get().tasks.find((t) => t.id === taskId);
+    const prevAssignees = prevTask?.assigneeIds ?? [];
     set((state) => ({
       tasks: state.tasks.map((t) =>
         t.id === taskId
@@ -224,6 +226,15 @@ export const useStore = create<Store>((set, get) => ({
     void import("@/lib/db/taskSync").then(({ syncTaskUpdate }) =>
       syncTaskUpdate(taskId, patch),
     );
+    // Direct task-assignment email (independent of automation engine)
+    if (patch.assigneeIds !== undefined) {
+      const updated = get().tasks.find((t) => t.id === taskId);
+      if (updated) {
+        void import("@/lib/db/notify").then(({ notifyTaskAssignment }) =>
+          notifyTaskAssignment(updated, prevAssignees, patch.assigneeIds!),
+        );
+      }
+    }
     const interestingKeys = [
       "title",
       "status",
@@ -282,6 +293,12 @@ export const useStore = create<Store>((set, get) => ({
         metadata: { title: newTask.title, projectId: newTask.projectId },
       }),
     );
+    // Email any teammates assigned at creation time
+    if (newTask.assigneeIds.length > 0) {
+      void import("@/lib/db/notify").then(({ notifyTaskAssignment }) =>
+        notifyTaskAssignment(newTask, [], newTask.assigneeIds),
+      );
+    }
     return newTask;
   },
 
@@ -492,6 +509,10 @@ export const useStore = create<Store>((set, get) => ({
         action: "added",
         metadata: { taskId: newComment.taskId, body: newComment.body.slice(0, 80) },
       }),
+    );
+    // Mention emails — fire on @handles inside the comment body
+    void import("@/lib/db/notify").then(({ notifyMentions }) =>
+      notifyMentions(newComment.body, newComment.taskId),
     );
     return newComment;
   },
