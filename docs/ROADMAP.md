@@ -21,7 +21,7 @@ The user shouldn't need to set env vars to swap from demo mode to a real backend
 - ✅ Data adapter stub (`lib/db/adapter.ts`) — exposes `useBackendMode()` so future code can branch
 - ✅ This roadmap doc
 
-## Pass 2 — Real auth & persistence (the spine) [chunks 1–5 done]
+## Pass 2 — Real auth & persistence (the spine) [DONE]
 
 Goal: enable Connected mode to actually persist data.
 
@@ -81,9 +81,27 @@ Goal: enable Connected mode to actually persist data.
 - ✅ Per-project chooser dialog on the Files page — picking files opens a modal where the user selects which project to attach to (defaults to first active, sorted active-first then alphabetical) before the upload kicks off. Demo / Connected hint appears inline.
 - ✅ **Tighter Storage RLS** — `project-files` policies switched from "any authenticated user" to org-membership checks against the first path segment (`<orgId>/...`), using the existing `is_member_of(uuid)` helper. Read / upload / delete all gated.
 
-**Deferred for later passes** (not strictly Pass 2 anymore):
+**Done in chunk 6 (Pass 2 closeout — every remaining hole):**
 
-- 🟡 Hydration of the new slices into the in-memory store on Connected boot (today the migration just creates the tables; pulling them into Zustand happens when each feature page is wired to live Postgres data — picked up alongside the Pass 7 backfill of dual-writes for `addInvoice` / `addQuote` / `toggleAutomation` / `setTimesheetStatus` / `setUserSkill` / `setFxRate` / `setTimeTrackingConfig`)
+- ✅ **Real invite email + invitation row** (`lib/auth/invite.ts`): Settings → Members invite button now writes a row into the `invitations` table (Connected mode) and sends a Resend email with the accept-invite link. Role select is wired (member / pm / admin / finance / qa). Demo mode just sends the email if Resend is configured, no row.
+- ✅ **Invoice-sent email** + status dual-write: `updateInvoiceStatus(id, "sent")` mirrors to Postgres and fires a Resend email to the client's primary contact with the invoice number, project, total, and due date.
+- ✅ **Deliverable-approved email**: when a `clientVisible` task flips to `done` (typical: client portal Approve), `notifyDeliverableApproved` emails the project PM + every assignee.
+- ✅ **Dual-writes for every previously-missing slice**:
+  - `addInvoice` → `invoices` row insert
+  - `addQuote` → `quotes` row + `quote_versions` rows
+  - `addQuoteVersion` / `setCurrentQuoteVersion` / `updateQuoteStatus` → respective `quote_versions` insert + `quotes` updates
+  - `toggleAutomation` → `automations.is_active` update
+  - Automation engine run loop → `automation_runs` insert + `automations` upsert (run count + lastRunAt)
+  - `setTimesheetStatus` → `timesheet_submissions` update with the status + reviewer / submission timestamps
+  - `setBaseCurrency` → `organizations.base_currency` update
+  - `setFxRate` → `fx_rates` upsert
+  - `setUserSkill` → `user_skills` upsert (or delete when proficiency drops to 0)
+  - `setTimeTrackingConfig` / `toggleLockedWeek` → `time_tracking_configs` upsert
+  - `addBudgetChange` → `budget_change_requests` insert
+  - `reviewBudgetChange` → `budget_change_requests` update + bumped `projects.total_budget` mirror
+- ✅ **Hydration extended** in `hydrateFromSupabase.ts`: pulls quotes (+ versions), invoices, automations + runs, timesheet submissions, fx rates + base currency, budget changes, user skills, and time tracking config on Connected boot. Counts surface in the post-hydration toast.
+
+Pass 2 is now end-to-end real: every mutation path that has a Postgres table writes through, the dashboard "Live" feed and Files page sync across users via Realtime, and email actually fires for the four PRD-promised flows (assignment, mention, invite, deliverable approved + invoice sent).
 
 ## Pass 3 — Phase 2 finish (financial) [DONE]
 

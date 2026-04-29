@@ -188,6 +188,7 @@ export const useStore = create<Store>((set, get) => ({
   timeTrackingConfig: TIME_TRACKING_CONFIG,
 
   moveTask: (taskId, status, position) => {
+    const prev = get().tasks.find((t) => t.id === taskId);
     set((state) => ({
       tasks: state.tasks.map((t) =>
         t.id === taskId
@@ -211,6 +212,15 @@ export const useStore = create<Store>((set, get) => ({
         metadata: { status },
       }),
     );
+    // Deliverable-approved email when a client-visible task flips to done
+    if (status === "done" && prev && prev.status !== "done") {
+      const updated = get().tasks.find((t) => t.id === taskId);
+      if (updated?.clientVisible) {
+        void import("@/lib/db/notify").then(({ notifyDeliverableApproved }) =>
+          notifyDeliverableApproved(updated),
+        );
+      }
+    }
   },
 
   updateTask: (taskId, patch) => {
@@ -232,6 +242,19 @@ export const useStore = create<Store>((set, get) => ({
       if (updated) {
         void import("@/lib/db/notify").then(({ notifyTaskAssignment }) =>
           notifyTaskAssignment(updated, prevAssignees, patch.assigneeIds!),
+        );
+      }
+    }
+    // Deliverable-approved email when client-visible task is moved to done
+    if (
+      patch.status === "done" &&
+      prevTask &&
+      prevTask.status !== "done"
+    ) {
+      const updated = get().tasks.find((t) => t.id === taskId);
+      if (updated?.clientVisible) {
+        void import("@/lib/db/notify").then(({ notifyDeliverableApproved }) =>
+          notifyDeliverableApproved(updated),
         );
       }
     }
@@ -523,17 +546,29 @@ export const useStore = create<Store>((set, get) => ({
     const total = subtotal + taxAmount;
     const newInvoice: Invoice = {
       ...invoice,
-      id: nextId("inv"),
-      organizationId: ORG.id,
+      id: uuidOrFallback("inv"),
+      organizationId: get().organization.id,
       subtotal,
       taxAmount,
       total,
     };
     set((state) => ({ invoices: [...state.invoices, newInvoice] }));
+    void import("@/lib/db/recordSync").then(({ syncInvoiceInsert }) =>
+      syncInvoiceInsert(newInvoice),
+    );
+    void import("@/lib/db/activitySync").then(({ logActivity }) =>
+      logActivity({
+        entityType: "invoice",
+        entityId: newInvoice.id,
+        action: "created",
+        metadata: { number: newInvoice.number, total: newInvoice.total },
+      }),
+    );
     return newInvoice;
   },
 
   updateInvoiceStatus: (id, status) => {
+    const prev = get().invoices.find((inv) => inv.id === id);
     set((state) => ({
       invoices: state.invoices.map((inv) =>
         inv.id === id
@@ -565,6 +600,19 @@ export const useStore = create<Store>((set, get) => ({
               : `status_${status}`,
       }),
     );
+    // Mirror to Postgres
+    void import("@/lib/db/recordSync").then(({ syncInvoiceStatus }) =>
+      syncInvoiceStatus(id, status),
+    );
+    // Send the invoice email when it flips to "sent" for the first time
+    if (status === "sent" && prev && prev.status !== "sent") {
+      const sent = get().invoices.find((inv) => inv.id === id);
+      if (sent) {
+        void import("@/lib/db/notify").then(({ notifyInvoiceSent }) =>
+          notifyInvoiceSent(sent),
+        );
+      }
+    }
   },
 
   toggleAutomation: (id) => {
@@ -573,6 +621,12 @@ export const useStore = create<Store>((set, get) => ({
         a.id === id ? { ...a, isActive: !a.isActive } : a,
       ),
     }));
+    const updated = get().automations.find((a) => a.id === id);
+    if (updated) {
+      void import("@/lib/db/recordSync").then(({ syncAutomationToggle }) =>
+        syncAutomationToggle(id, updated.isActive),
+      );
+    }
   },
 
   updateQuoteStatus: (quoteId, status) => {
@@ -581,6 +635,9 @@ export const useStore = create<Store>((set, get) => ({
         q.id === quoteId ? { ...q, status } : q,
       ),
     }));
+    void import("@/lib/db/recordSync").then(({ syncQuoteStatus }) =>
+      syncQuoteStatus(quoteId, status),
+    );
   },
 
   setCurrentQuoteVersion: (quoteId, versionId) => {
@@ -589,6 +646,9 @@ export const useStore = create<Store>((set, get) => ({
         q.id === quoteId ? { ...q, currentVersionId: versionId } : q,
       ),
     }));
+    void import("@/lib/db/recordSync").then(({ syncQuoteCurrentVersion }) =>
+      syncQuoteCurrentVersion(quoteId, versionId),
+    );
   },
 
   addQuoteVersion: (quoteId, version) => {
@@ -610,16 +670,34 @@ export const useStore = create<Store>((set, get) => ({
           : q,
       ),
     }));
+    void import("@/lib/db/recordSync").then(
+      ({ syncQuoteVersionInsert, syncQuoteCurrentVersion }) =>
+        Promise.all([
+          syncQuoteVersionInsert(quoteId, version),
+          syncQuoteCurrentVersion(quoteId, version.id),
+        ]),
+    );
   },
 
   addQuote: (quote) => {
     const newQuote: Quote = {
       ...quote,
-      id: nextId("q"),
-      organizationId: ORG.id,
+      id: uuidOrFallback("q"),
+      organizationId: get().organization.id,
       createdAt: new Date().toISOString(),
     };
     set((state) => ({ quotes: [...state.quotes, newQuote] }));
+    void import("@/lib/db/recordSync").then(({ syncQuoteInsert }) =>
+      syncQuoteInsert(newQuote),
+    );
+    void import("@/lib/db/activitySync").then(({ logActivity }) =>
+      logActivity({
+        entityType: "project",
+        entityId: newQuote.id,
+        action: "quote_created",
+        metadata: { number: newQuote.number, name: newQuote.name },
+      }),
+    );
     return newQuote;
   },
 
@@ -790,6 +868,9 @@ export const useStore = create<Store>((set, get) => ({
         },
       }),
     );
+    void import("@/lib/db/recordSync").then(({ syncTimesheetStatus }) =>
+      syncTimesheetStatus(id, status),
+    );
   },
 
   setUserSkill: (userId, skill, proficiency) => {
@@ -817,20 +898,29 @@ export const useStore = create<Store>((set, get) => ({
         userSkills: [...state.userSkills, { userId, skill, proficiency }],
       };
     });
+    const orgId = get().organization.id;
+    void import("@/lib/db/recordSync").then(({ syncUserSkillUpsert }) =>
+      syncUserSkillUpsert(userId, skill, proficiency, orgId),
+    );
   },
 
   setBaseCurrency: (currency) => {
     set({ baseCurrency: currency });
+    const orgId = get().organization.id;
+    void import("@/lib/db/recordSync").then(({ syncBaseCurrency }) =>
+      syncBaseCurrency(currency, orgId),
+    );
   },
 
   setFxRate: (currency, rateToBase) => {
+    const updatedAt = new Date().toISOString();
     set((state) => {
       const existing = state.fxRates.find((r) => r.currency === currency);
       if (existing) {
         return {
           fxRates: state.fxRates.map((r) =>
             r.currency === currency
-              ? { ...r, rateToBase, updatedAt: new Date().toISOString() }
+              ? { ...r, rateToBase, updatedAt }
               : r,
           ),
         };
@@ -838,21 +928,28 @@ export const useStore = create<Store>((set, get) => ({
       return {
         fxRates: [
           ...state.fxRates,
-          { currency, rateToBase, updatedAt: new Date().toISOString() },
+          { currency, rateToBase, updatedAt },
         ],
       };
     });
+    const orgId = get().organization.id;
+    void import("@/lib/db/recordSync").then(({ syncFxRateUpsert }) =>
+      syncFxRateUpsert({ currency, rateToBase, updatedAt }, orgId),
+    );
   },
 
   addBudgetChange: (req) => {
     const newReq: BudgetChangeRequest = {
       ...req,
-      id: nextId("bcr"),
-      organizationId: ORG.id,
+      id: uuidOrFallback("bcr"),
+      organizationId: get().organization.id,
       status: "pending",
       createdAt: new Date().toISOString(),
     };
     set((state) => ({ budgetChanges: [...state.budgetChanges, newReq] }));
+    void import("@/lib/db/recordSync").then(({ syncBudgetChangeInsert }) =>
+      syncBudgetChangeInsert(newReq),
+    );
     return newReq;
   },
 
@@ -893,6 +990,10 @@ export const useStore = create<Store>((set, get) => ({
         syncProjectUpdate(projectId!, { totalBudget: newTotalBudget }),
       );
     }
+    // Always mirror the review status to the budget_change_requests row
+    void import("@/lib/db/recordSync").then(({ syncBudgetChangeReview }) =>
+      syncBudgetChangeReview(id, status, reviewerId, reviewNote),
+    );
     if (projectId) {
       void import("@/lib/db/activitySync").then(({ logActivity }) =>
         logActivity({
@@ -909,6 +1010,11 @@ export const useStore = create<Store>((set, get) => ({
     set((state) => ({
       timeTrackingConfig: { ...state.timeTrackingConfig, ...patch },
     }));
+    const orgId = get().organization.id;
+    const updated = get().timeTrackingConfig;
+    void import("@/lib/db/recordSync").then(({ syncTimeTrackingConfig }) =>
+      syncTimeTrackingConfig(updated, orgId),
+    );
   },
 
   toggleLockedWeek: (weekStart) => {
@@ -925,6 +1031,11 @@ export const useStore = create<Store>((set, get) => ({
         },
       };
     });
+    const orgId = get().organization.id;
+    const updated = get().timeTrackingConfig;
+    void import("@/lib/db/recordSync").then(({ syncTimeTrackingConfig }) =>
+      syncTimeTrackingConfig(updated, orgId),
+    );
   },
 }));
 

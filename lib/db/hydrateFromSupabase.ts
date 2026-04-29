@@ -7,24 +7,50 @@
  * the seeded slices with Postgres data so the UI shows the user's real
  * workspace.
  *
- * Slices currently hydrated:
- *   organization, users (org members + their profiles), clients,
- *   projects, phases, tasks (with assignees)
+ * Hydrated slices:
+ *   organization (with base_currency), users (org members + profiles),
+ *   clients, projects, phases, tasks (with assignees), comments,
+ *   time_entries, quotes (+ versions), invoices, automations + runs,
+ *   timesheet_submissions, fx_rates, budget_change_requests,
+ *   user_skills, time_tracking_configs.
  *
- * Other slices (quotes, invoices, automations, timesheet, fx, budget
- * changes, skills) live only in the in-memory store today and aren't
- * in the migration yet — they get added in subsequent Pass 2 chunks.
+ * Files are hydrated separately by lib/db/fileSync.ts#hydrateFiles.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { useStore } from "@/lib/db/store";
 import type {
+  AutomationRule,
+  AutomationRun,
+  AutomationStep,
+  AutomationTriggerType,
+  AutomationRunActionResult,
+  AutomationRunStatus,
+  BudgetChangeRequest,
+  BudgetChangeStatus,
   Client,
   Comment,
+  FxRate,
+  Invoice,
+  InvoiceLineItem,
+  InvoiceStatus,
+  InvoiceType,
   Phase,
   Project,
+  Quote,
+  QuoteLineItem,
+  QuoteStatus,
+  QuoteVersion,
+  QuoteVersionStatus,
+  ProjectType,
+  RoundingRule,
+  SkillProficiency,
   Task,
   TimeEntry,
+  TimeTrackingConfig,
+  TimesheetStatus,
+  TimesheetSubmission,
   User,
+  UserSkill,
   OrgRole,
 } from "@/types/domain";
 
@@ -185,6 +211,71 @@ export async function hydrateFromSupabase(
     .eq("organization_id", orgId);
   if (timeErr) return { ok: false, message: `time_entries: ${timeErr.message}` };
 
+  // 9. Quotes (header) + versions
+  const { data: quotesRaw } = await supabase
+    .from("quotes")
+    .select("*")
+    .eq("organization_id", orgId);
+  const { data: versionsRaw } = await supabase
+    .from("quote_versions")
+    .select("*")
+    .eq("organization_id", orgId)
+    .order("version_number", { ascending: true });
+
+  // 10. Invoices
+  const { data: invoicesRaw } = await supabase
+    .from("invoices")
+    .select("*")
+    .eq("organization_id", orgId);
+
+  // 11. Automations + runs
+  const { data: automationsRaw } = await supabase
+    .from("automations")
+    .select("*")
+    .eq("organization_id", orgId);
+  const { data: automationRunsRaw } = await supabase
+    .from("automation_runs")
+    .select("*")
+    .eq("organization_id", orgId)
+    .order("created_at", { ascending: false })
+    .limit(200);
+
+  // 12. Timesheet submissions
+  const { data: timesheetsRaw } = await supabase
+    .from("timesheet_submissions")
+    .select("*")
+    .eq("organization_id", orgId);
+
+  // 13. FX rates + base currency (already on org row)
+  const { data: fxRaw } = await supabase
+    .from("fx_rates")
+    .select("*")
+    .eq("organization_id", orgId);
+  const { data: orgWithBase } = await supabase
+    .from("organizations")
+    .select("base_currency")
+    .eq("id", orgId)
+    .single();
+
+  // 14. Budget change requests
+  const { data: budgetChangesRaw } = await supabase
+    .from("budget_change_requests")
+    .select("*")
+    .eq("organization_id", orgId);
+
+  // 15. User skills
+  const { data: userSkillsRaw } = await supabase
+    .from("user_skills")
+    .select("*")
+    .eq("organization_id", orgId);
+
+  // 16. Time tracking config (one row per org; may be missing)
+  const { data: ttcRaw } = await supabase
+    .from("time_tracking_configs")
+    .select("*")
+    .eq("organization_id", orgId)
+    .maybeSingle();
+
   // ── Map DB rows → in-memory shapes ────────────────────────────────
   const users: User[] = members.map((m) => ({
     id: m.user_id,
@@ -342,6 +433,285 @@ export async function hydrateFromSupabase(
         .reduce((s, e) => s + e.durationMinutes, 0) / 60,
   }));
 
+  // ── Quotes ────────────────────────────────────────────────────────
+  const versionsByQuote = new Map<string, QuoteVersion[]>();
+  type DbVersion = {
+    id: string;
+    quote_id: string;
+    version_number: number;
+    status: QuoteVersionStatus;
+    notes: string | null;
+    line_items: QuoteLineItem[];
+    subtotal: number;
+    internal_cost: number;
+    tax_rate: number;
+    tax_amount: number;
+    total: number;
+    created_at: string;
+    sent_at: string | null;
+  };
+  for (const v of (versionsRaw ?? []) as DbVersion[]) {
+    const arr = versionsByQuote.get(v.quote_id) ?? [];
+    arr.push({
+      id: v.id,
+      versionNumber: v.version_number,
+      status: v.status,
+      notes: v.notes ?? undefined,
+      lineItems: v.line_items ?? [],
+      subtotal: Number(v.subtotal),
+      internalCost: Number(v.internal_cost),
+      taxRate: Number(v.tax_rate),
+      taxAmount: Number(v.tax_amount),
+      total: Number(v.total),
+      createdAt: v.created_at,
+      sentAt: v.sent_at ?? undefined,
+    });
+    versionsByQuote.set(v.quote_id, arr);
+  }
+  type DbQuote = {
+    id: string;
+    organization_id: string;
+    client_id: string;
+    number: string;
+    name: string;
+    type: ProjectType;
+    description: string | null;
+    status: QuoteStatus;
+    currency: string;
+    valid_until: string;
+    current_version_id: string;
+    converted_to_project_id: string | null;
+    created_by: string | null;
+    created_at: string;
+  };
+  const quotes: Quote[] = ((quotesRaw ?? []) as DbQuote[]).map((q) => ({
+    id: q.id,
+    organizationId: q.organization_id,
+    number: q.number,
+    clientId: q.client_id,
+    name: q.name,
+    type: q.type,
+    description: q.description ?? undefined,
+    status: q.status,
+    currency: q.currency,
+    validUntil: q.valid_until,
+    currentVersionId: q.current_version_id,
+    versions: versionsByQuote.get(q.id) ?? [],
+    convertedToProjectId: q.converted_to_project_id ?? undefined,
+    createdAt: q.created_at,
+    createdBy: q.created_by ?? undefined,
+  }));
+
+  // ── Invoices ──────────────────────────────────────────────────────
+  type DbInvoice = {
+    id: string;
+    organization_id: string;
+    project_id: string;
+    client_id: string;
+    number: string;
+    type: InvoiceType;
+    status: InvoiceStatus;
+    issue_date: string;
+    due_date: string;
+    currency: string;
+    notes: string | null;
+    line_items: InvoiceLineItem[];
+    subtotal: number;
+    tax_rate: number;
+    tax_amount: number;
+    total: number;
+    amount_paid: number;
+    paid_at: string | null;
+    sent_at: string | null;
+  };
+  const invoices: Invoice[] = ((invoicesRaw ?? []) as DbInvoice[]).map(
+    (i) => ({
+      id: i.id,
+      organizationId: i.organization_id,
+      projectId: i.project_id,
+      clientId: i.client_id,
+      number: i.number,
+      type: i.type,
+      status: i.status,
+      issueDate: i.issue_date,
+      dueDate: i.due_date,
+      currency: i.currency,
+      notes: i.notes ?? undefined,
+      lineItems: i.line_items ?? [],
+      subtotal: Number(i.subtotal),
+      taxRate: Number(i.tax_rate),
+      taxAmount: Number(i.tax_amount),
+      total: Number(i.total),
+      amountPaid: Number(i.amount_paid),
+      paidAt: i.paid_at ?? undefined,
+      sentAt: i.sent_at ?? undefined,
+    }),
+  );
+
+  // ── Automations + runs ────────────────────────────────────────────
+  type DbAutomation = {
+    id: string;
+    organization_id: string;
+    name: string;
+    description: string | null;
+    is_active: boolean;
+    category: AutomationRule["category"];
+    trigger: AutomationStep;
+    conditions: AutomationStep[];
+    actions: AutomationStep[];
+    run_count: number;
+    last_run_at: string | null;
+    created_at: string;
+  };
+  const automations: AutomationRule[] = (
+    (automationsRaw ?? []) as DbAutomation[]
+  ).map((r) => ({
+    id: r.id,
+    organizationId: r.organization_id,
+    name: r.name,
+    description: r.description ?? undefined,
+    isActive: r.is_active,
+    category: r.category,
+    trigger: r.trigger,
+    conditions: r.conditions ?? [],
+    actions: r.actions ?? [],
+    runCount: r.run_count,
+    lastRunAt: r.last_run_at ?? undefined,
+    createdAt: r.created_at,
+  }));
+
+  type DbAutomationRun = {
+    id: string;
+    rule_id: string;
+    trigger_type: AutomationTriggerType;
+    trigger_summary: string;
+    entity_type: string | null;
+    entity_id: string | null;
+    status: AutomationRunStatus;
+    actions: AutomationRunActionResult[];
+    created_at: string;
+  };
+  const automationRuns: AutomationRun[] = (
+    (automationRunsRaw ?? []) as DbAutomationRun[]
+  ).map((r) => ({
+    id: r.id,
+    ruleId: r.rule_id,
+    triggerType: r.trigger_type,
+    triggerSummary: r.trigger_summary,
+    entityType: r.entity_type ?? undefined,
+    entityId: r.entity_id ?? undefined,
+    status: r.status,
+    actions: r.actions ?? [],
+    createdAt: r.created_at,
+  }));
+
+  // ── Timesheets ────────────────────────────────────────────────────
+  type DbTimesheet = {
+    id: string;
+    organization_id: string;
+    user_id: string;
+    week_start: string;
+    status: TimesheetStatus;
+    total_minutes: number;
+    billable_minutes: number;
+    entry_ids: string[];
+    notes: string | null;
+    submitted_at: string | null;
+    reviewed_at: string | null;
+    reviewed_by: string | null;
+    rejection_reason: string | null;
+  };
+  const timesheetSubmissions: TimesheetSubmission[] = (
+    (timesheetsRaw ?? []) as DbTimesheet[]
+  ).map((t) => ({
+    id: t.id,
+    organizationId: t.organization_id,
+    userId: t.user_id,
+    weekStart: t.week_start,
+    status: t.status,
+    totalMinutes: t.total_minutes,
+    billableMinutes: t.billable_minutes,
+    entryIds: t.entry_ids ?? [],
+    notes: t.notes ?? undefined,
+    submittedAt: t.submitted_at ?? undefined,
+    reviewedAt: t.reviewed_at ?? undefined,
+    reviewedBy: t.reviewed_by ?? undefined,
+    rejectionReason: t.rejection_reason ?? undefined,
+  }));
+
+  // ── FX + base currency ────────────────────────────────────────────
+  type DbFx = {
+    currency: string;
+    rate_to_base: number;
+    updated_at: string;
+  };
+  const fxRates: FxRate[] = ((fxRaw ?? []) as DbFx[]).map((r) => ({
+    currency: r.currency,
+    rateToBase: Number(r.rate_to_base),
+    updatedAt: r.updated_at,
+  }));
+  const baseCurrency =
+    (orgWithBase as { base_currency?: string } | null)?.base_currency ?? "USD";
+
+  // ── Budget changes ────────────────────────────────────────────────
+  type DbBudgetChange = {
+    id: string;
+    organization_id: string;
+    project_id: string;
+    requested_by: string;
+    delta: number;
+    reason: string;
+    status: BudgetChangeStatus;
+    reviewed_at: string | null;
+    reviewed_by: string | null;
+    review_note: string | null;
+    created_at: string;
+  };
+  const budgetChanges: BudgetChangeRequest[] = (
+    (budgetChangesRaw ?? []) as DbBudgetChange[]
+  ).map((b) => ({
+    id: b.id,
+    organizationId: b.organization_id,
+    projectId: b.project_id,
+    requestedBy: b.requested_by,
+    delta: Number(b.delta),
+    reason: b.reason,
+    status: b.status,
+    createdAt: b.created_at,
+    reviewedAt: b.reviewed_at ?? undefined,
+    reviewedBy: b.reviewed_by ?? undefined,
+    reviewNote: b.review_note ?? undefined,
+  }));
+
+  // ── User skills ───────────────────────────────────────────────────
+  type DbUserSkill = {
+    user_id: string;
+    skill: string;
+    proficiency: SkillProficiency;
+  };
+  const userSkills: UserSkill[] = (
+    (userSkillsRaw ?? []) as DbUserSkill[]
+  ).map((s) => ({
+    userId: s.user_id,
+    skill: s.skill,
+    proficiency: s.proficiency,
+  }));
+
+  // ── Time tracking config (with defaults) ──────────────────────────
+  type DbTtc = {
+    rounding: RoundingRule;
+    locked_weeks: string[];
+    idle_threshold_minutes: number;
+  };
+  const ttc = ttcRaw as DbTtc | null;
+  const timeTrackingConfig: TimeTrackingConfig = ttc
+    ? {
+        rounding: ttc.rounding,
+        lockedWeeks: ttc.locked_weeks ?? [],
+        idleThresholdMinutes: ttc.idle_threshold_minutes,
+      }
+    : useStore.getState().timeTrackingConfig;
+
   useStore.setState((state) => ({
     organization: { id: org.id, slug: org.slug, name: org.name },
     currentUserId,
@@ -353,6 +723,16 @@ export async function hydrateFromSupabase(
     comments,
     timeEntries,
     files: [],
+    quotes: quotes.length > 0 ? quotes : state.quotes,
+    invoices: invoices.length > 0 ? invoices : state.invoices,
+    automations: automations.length > 0 ? automations : state.automations,
+    automationRuns,
+    timesheetSubmissions,
+    fxRates,
+    baseCurrency,
+    budgetChanges,
+    userSkills,
+    timeTrackingConfig,
   }));
 
   return {
@@ -366,6 +746,13 @@ export async function hydrateFromSupabase(
       tasks: tasks.length,
       comments: comments.length,
       timeEntries: timeEntries.length,
+      quotes: quotes.length,
+      invoices: invoices.length,
+      automations: automations.length,
+      timesheets: timesheetSubmissions.length,
+      fxRates: fxRates.length,
+      budgetChanges: budgetChanges.length,
+      userSkills: userSkills.length,
     },
   };
 }

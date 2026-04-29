@@ -15,7 +15,7 @@
  */
 import { sendEmail } from "@/lib/db/adapter";
 import { useStore } from "@/lib/db/store";
-import type { Task } from "@/types/domain";
+import type { Invoice, Task } from "@/types/domain";
 
 const MENTION_REGEX = /@([\w.-]+)/g;
 
@@ -113,6 +113,81 @@ export function notifyMentions(commentBody: string, taskId: string): void {
     `;
     void sendEmail({ to: user.email, subject, html });
   }
+}
+
+/**
+ * Fire when a client-visible task is moved to "done" — a deliverable was
+ * approved (typically by the client through the portal). Recipients:
+ * the project PM + any task assignees who actually did the work.
+ */
+export function notifyDeliverableApproved(task: Task): void {
+  if (!task.clientVisible) return;
+  const state = useStore.getState();
+  const project = state.projects.find((p) => p.id === task.projectId);
+  if (!project) return;
+
+  const recipientIds = new Set<string>();
+  if (project.projectManagerId) recipientIds.add(project.projectManagerId);
+  for (const id of task.assigneeIds) recipientIds.add(id);
+
+  for (const userId of recipientIds) {
+    const user = state.users.find((u) => u.id === userId);
+    if (!user?.email) continue;
+    const subject = `Approved: ${task.title}`;
+    const html = `
+      <p>Hi ${user.fullName.split(" ")[0]},</p>
+      <p>Your client just approved <strong>${escapeHtml(task.title)}</strong>
+         in ${escapeHtml(project.name)}. 🎉</p>
+      <p>This deliverable is now marked Done. If it's part of a milestone-billing
+         project, the next invoice may be ready to issue.</p>
+      <p><a href="${taskUrl(task)}">Open the task &rarr;</a></p>
+    `;
+    void sendEmail({ to: user.email, subject, html });
+  }
+}
+
+/**
+ * Fire when an invoice's status flips to "sent" for the first time.
+ * Sends to the client's primary contact email if known.
+ */
+export function notifyInvoiceSent(invoice: Invoice): void {
+  const state = useStore.getState();
+  const client = state.clients.find((c) => c.id === invoice.clientId);
+  if (!client?.primaryContactEmail) return;
+
+  const project = state.projects.find((p) => p.id === invoice.projectId);
+  const formattedTotal = new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency: invoice.currency,
+  }).format(invoice.total);
+
+  const subject = `Invoice ${invoice.number} from ${state.organization.name}`;
+  const html = `
+    <p>Hi ${client.primaryContactName?.split(" ")[0] ?? "there"},</p>
+    <p>A new invoice from <strong>${escapeHtml(state.organization.name)}</strong>
+       is ready for your review.</p>
+    <table style="border-collapse:collapse;margin:16px 0">
+      <tr>
+        <td style="padding:6px 12px;color:#666">Invoice</td>
+        <td style="padding:6px 12px"><strong>${invoice.number}</strong></td>
+      </tr>
+      <tr>
+        <td style="padding:6px 12px;color:#666">Project</td>
+        <td style="padding:6px 12px">${escapeHtml(project?.name ?? "—")}</td>
+      </tr>
+      <tr>
+        <td style="padding:6px 12px;color:#666">Total</td>
+        <td style="padding:6px 12px"><strong>${formattedTotal}</strong></td>
+      </tr>
+      <tr>
+        <td style="padding:6px 12px;color:#666">Due</td>
+        <td style="padding:6px 12px">${invoice.dueDate}</td>
+      </tr>
+    </table>
+    <p>You can view + pay the invoice from your client portal.</p>
+    <p style="color:#888;font-size:12px">Replies go straight to your account team.</p>
+  `;
+  void sendEmail({ to: client.primaryContactEmail, subject, html });
 }
 
 function escapeHtml(s: string): string {

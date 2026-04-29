@@ -13,13 +13,33 @@ import { toast } from "sonner";
 import { useRuntimeConfig } from "@/lib/config/runtime";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import type {
+  AutomationRule,
+  AutomationRun,
+  BudgetChangeRequest,
+  BudgetChangeStatus,
   Client,
   Comment,
+  FxRate,
+  Invoice,
+  InvoiceStatus,
   Phase,
   Project,
+  Quote,
+  QuoteStatus,
+  QuoteVersion,
+  SkillProficiency,
   Task,
   TimeEntry,
+  TimeTrackingConfig,
+  TimesheetStatus,
+  TimesheetSubmission,
 } from "@/types/domain";
+
+import { useStore } from "@/lib/db/store";
+
+function getOrgId(): string {
+  return useStore.getState().organization.id;
+}
 
 function getClient(): SupabaseClient | null {
   const cfg = useRuntimeConfig.getState();
@@ -195,6 +215,354 @@ export async function syncTimeEntryInsert(
     billable: entry.billable,
   });
   warn("Time entry persist", error);
+}
+
+// ── Invoices ───────────────────────────────────────────────────────────
+export async function syncInvoiceInsert(invoice: Invoice): Promise<void> {
+  const supabase = getClient();
+  if (!supabase) return;
+  const { error } = await supabase.from("invoices").insert({
+    id: invoice.id,
+    organization_id: invoice.organizationId,
+    project_id: invoice.projectId,
+    client_id: invoice.clientId,
+    number: invoice.number,
+    type: invoice.type,
+    status: invoice.status,
+    issue_date: invoice.issueDate,
+    due_date: invoice.dueDate,
+    currency: invoice.currency,
+    notes: invoice.notes ?? null,
+    line_items: invoice.lineItems,
+    subtotal: invoice.subtotal,
+    tax_rate: invoice.taxRate,
+    tax_amount: invoice.taxAmount,
+    total: invoice.total,
+    amount_paid: invoice.amountPaid,
+    paid_at: invoice.paidAt ?? null,
+    sent_at: invoice.sentAt ?? null,
+  });
+  warn("Invoice persist", error);
+}
+
+export async function syncInvoiceStatus(
+  invoiceId: string,
+  status: InvoiceStatus,
+): Promise<void> {
+  const supabase = getClient();
+  if (!supabase) return;
+  const patch: Record<string, unknown> = { status };
+  const inv = useStore.getState().invoices.find((i) => i.id === invoiceId);
+  if (status === "sent" && inv?.sentAt) patch.sent_at = inv.sentAt;
+  if (status === "paid" && inv) {
+    patch.paid_at = inv.paidAt;
+    patch.amount_paid = inv.amountPaid;
+  }
+  const { error } = await supabase
+    .from("invoices")
+    .update(patch)
+    .eq("id", invoiceId);
+  warn("Invoice status", error);
+}
+
+// ── Quotes ─────────────────────────────────────────────────────────────
+export async function syncQuoteInsert(quote: Quote): Promise<void> {
+  const supabase = getClient();
+  if (!supabase) return;
+  const { error: qErr } = await supabase.from("quotes").insert({
+    id: quote.id,
+    organization_id: quote.organizationId,
+    client_id: quote.clientId,
+    number: quote.number,
+    name: quote.name,
+    type: quote.type,
+    description: quote.description ?? null,
+    status: quote.status,
+    currency: quote.currency,
+    valid_until: quote.validUntil,
+    current_version_id: quote.currentVersionId,
+    converted_to_project_id: quote.convertedToProjectId ?? null,
+    created_by: quote.createdBy ?? null,
+  });
+  warn("Quote persist", qErr);
+  if (qErr) return;
+  if (quote.versions.length === 0) return;
+  const { error: vErr } = await supabase.from("quote_versions").insert(
+    quote.versions.map((v) =>
+      mapVersionToRow(v, quote.id, quote.organizationId),
+    ),
+  );
+  warn("Quote versions", vErr);
+}
+
+export async function syncQuoteStatus(
+  quoteId: string,
+  status: QuoteStatus,
+): Promise<void> {
+  const supabase = getClient();
+  if (!supabase) return;
+  const { error } = await supabase
+    .from("quotes")
+    .update({ status })
+    .eq("id", quoteId);
+  warn("Quote status", error);
+}
+
+export async function syncQuoteCurrentVersion(
+  quoteId: string,
+  versionId: string,
+): Promise<void> {
+  const supabase = getClient();
+  if (!supabase) return;
+  const { error } = await supabase
+    .from("quotes")
+    .update({ current_version_id: versionId })
+    .eq("id", quoteId);
+  warn("Quote current version", error);
+}
+
+export async function syncQuoteVersionInsert(
+  quoteId: string,
+  version: QuoteVersion,
+): Promise<void> {
+  const supabase = getClient();
+  if (!supabase) return;
+  const orgId = getOrgId();
+  const { error } = await supabase
+    .from("quote_versions")
+    .insert(mapVersionToRow(version, quoteId, orgId));
+  warn("Quote version persist", error);
+}
+
+function mapVersionToRow(
+  v: QuoteVersion,
+  quoteId: string,
+  orgId: string,
+): Record<string, unknown> {
+  return {
+    id: v.id,
+    organization_id: orgId,
+    quote_id: quoteId,
+    version_number: v.versionNumber,
+    status: v.status,
+    notes: v.notes ?? null,
+    line_items: v.lineItems,
+    subtotal: v.subtotal,
+    internal_cost: v.internalCost,
+    tax_rate: v.taxRate,
+    tax_amount: v.taxAmount,
+    total: v.total,
+    sent_at: v.sentAt ?? null,
+  };
+}
+
+// ── Automations ────────────────────────────────────────────────────────
+export async function syncAutomationToggle(
+  ruleId: string,
+  isActive: boolean,
+): Promise<void> {
+  const supabase = getClient();
+  if (!supabase) return;
+  const { error } = await supabase
+    .from("automations")
+    .update({ is_active: isActive })
+    .eq("id", ruleId);
+  warn("Automation toggle", error);
+}
+
+export async function syncAutomationUpsert(rule: AutomationRule): Promise<void> {
+  const supabase = getClient();
+  if (!supabase) return;
+  const { error } = await supabase.from("automations").upsert({
+    id: rule.id,
+    organization_id: rule.organizationId,
+    name: rule.name,
+    description: rule.description ?? null,
+    is_active: rule.isActive,
+    category: rule.category,
+    trigger: rule.trigger,
+    conditions: rule.conditions,
+    actions: rule.actions,
+    run_count: rule.runCount,
+    last_run_at: rule.lastRunAt ?? null,
+  });
+  warn("Automation upsert", error);
+}
+
+export async function syncAutomationRunInsert(
+  run: AutomationRun,
+  organizationId: string,
+): Promise<void> {
+  const supabase = getClient();
+  if (!supabase) return;
+  const { error } = await supabase.from("automation_runs").insert({
+    id: run.id,
+    organization_id: organizationId,
+    rule_id: run.ruleId,
+    trigger_type: run.triggerType,
+    trigger_summary: run.triggerSummary,
+    entity_type: run.entityType ?? null,
+    entity_id: run.entityId ?? null,
+    status: run.status,
+    actions: run.actions,
+  });
+  warn("Automation run", error);
+}
+
+// ── Timesheet submissions ──────────────────────────────────────────────
+export async function syncTimesheetUpsert(
+  submission: TimesheetSubmission,
+): Promise<void> {
+  const supabase = getClient();
+  if (!supabase) return;
+  const { error } = await supabase.from("timesheet_submissions").upsert({
+    id: submission.id,
+    organization_id: submission.organizationId,
+    user_id: submission.userId,
+    week_start: submission.weekStart,
+    status: submission.status,
+    total_minutes: submission.totalMinutes,
+    billable_minutes: submission.billableMinutes,
+    entry_ids: submission.entryIds,
+    notes: submission.notes ?? null,
+    submitted_at: submission.submittedAt ?? null,
+    reviewed_at: submission.reviewedAt ?? null,
+    reviewed_by: submission.reviewedBy ?? null,
+    rejection_reason: submission.rejectionReason ?? null,
+  });
+  warn("Timesheet upsert", error);
+}
+
+export async function syncTimesheetStatus(
+  id: string,
+  status: TimesheetStatus,
+): Promise<void> {
+  const supabase = getClient();
+  if (!supabase) return;
+  const sub = useStore.getState().timesheetSubmissions.find((s) => s.id === id);
+  if (!sub) return;
+  const { error } = await supabase
+    .from("timesheet_submissions")
+    .update({
+      status,
+      submitted_at: sub.submittedAt ?? null,
+      reviewed_at: sub.reviewedAt ?? null,
+      reviewed_by: sub.reviewedBy ?? null,
+      rejection_reason: sub.rejectionReason ?? null,
+    })
+    .eq("id", id);
+  warn("Timesheet status", error);
+}
+
+// ── FX rates + base currency ───────────────────────────────────────────
+export async function syncFxRateUpsert(
+  rate: FxRate,
+  organizationId: string,
+): Promise<void> {
+  const supabase = getClient();
+  if (!supabase) return;
+  const { error } = await supabase.from("fx_rates").upsert({
+    organization_id: organizationId,
+    currency: rate.currency,
+    rate_to_base: rate.rateToBase,
+    updated_at: rate.updatedAt,
+  });
+  warn("FX upsert", error);
+}
+
+export async function syncBaseCurrency(
+  currency: string,
+  organizationId: string,
+): Promise<void> {
+  const supabase = getClient();
+  if (!supabase) return;
+  const { error } = await supabase
+    .from("organizations")
+    .update({ base_currency: currency })
+    .eq("id", organizationId);
+  warn("Base currency", error);
+}
+
+// ── User skills ────────────────────────────────────────────────────────
+export async function syncUserSkillUpsert(
+  userId: string,
+  skill: string,
+  proficiency: SkillProficiency,
+  organizationId: string,
+): Promise<void> {
+  const supabase = getClient();
+  if (!supabase) return;
+  if (proficiency === 0) {
+    const { error } = await supabase
+      .from("user_skills")
+      .delete()
+      .eq("organization_id", organizationId)
+      .eq("user_id", userId)
+      .eq("skill", skill);
+    warn("User skill clear", error);
+    return;
+  }
+  const { error } = await supabase.from("user_skills").upsert({
+    organization_id: organizationId,
+    user_id: userId,
+    skill,
+    proficiency,
+  });
+  warn("User skill", error);
+}
+
+// ── Time tracking config ───────────────────────────────────────────────
+export async function syncTimeTrackingConfig(
+  config: TimeTrackingConfig,
+  organizationId: string,
+): Promise<void> {
+  const supabase = getClient();
+  if (!supabase) return;
+  const { error } = await supabase.from("time_tracking_configs").upsert({
+    organization_id: organizationId,
+    rounding: config.rounding,
+    locked_weeks: config.lockedWeeks,
+    idle_threshold_minutes: config.idleThresholdMinutes,
+  });
+  warn("Time tracking config", error);
+}
+
+// ── Budget change requests ─────────────────────────────────────────────
+export async function syncBudgetChangeInsert(
+  request: BudgetChangeRequest,
+): Promise<void> {
+  const supabase = getClient();
+  if (!supabase) return;
+  const { error } = await supabase.from("budget_change_requests").insert({
+    id: request.id,
+    organization_id: request.organizationId,
+    project_id: request.projectId,
+    requested_by: request.requestedBy,
+    delta: request.delta,
+    reason: request.reason,
+    status: request.status,
+  });
+  warn("Budget change persist", error);
+}
+
+export async function syncBudgetChangeReview(
+  id: string,
+  status: BudgetChangeStatus,
+  reviewerId: string,
+  reviewNote?: string,
+): Promise<void> {
+  const supabase = getClient();
+  if (!supabase) return;
+  const { error } = await supabase
+    .from("budget_change_requests")
+    .update({
+      status,
+      reviewed_by: reviewerId,
+      reviewed_at: new Date().toISOString(),
+      review_note: reviewNote ?? null,
+    })
+    .eq("id", id);
+  warn("Budget change review", error);
 }
 
 // ── Tasks bulk insert (for quote→project conversion) ──────────────────

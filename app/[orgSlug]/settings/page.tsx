@@ -115,6 +115,8 @@ export default function SettingsPage() {
   const [openKey, setOpenKey] = useState<string | null>("connections");
   const [accent, setAccent] = useState(221);
   const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<OrgRole>("member");
+  const [inviting, setInviting] = useState(false);
 
   const setAccentColor = (h: number) => {
     setAccent(h);
@@ -204,23 +206,43 @@ export default function SettingsPage() {
                                 className="pl-9"
                               />
                             </div>
-                            <select className="rounded-md border border-input bg-background px-3 text-sm">
-                              <option>Team member</option>
-                              <option>Project manager</option>
-                              <option>Admin</option>
-                              <option>Finance</option>
-                              <option>QA</option>
+                            <select
+                              value={inviteRole}
+                              onChange={(e) =>
+                                setInviteRole(e.target.value as OrgRole)
+                              }
+                              className="rounded-md border border-input bg-background px-3 text-sm"
+                            >
+                              <option value="member">Team member</option>
+                              <option value="pm">Project manager</option>
+                              <option value="admin">Admin</option>
+                              <option value="finance">Finance</option>
+                              <option value="qa">QA</option>
                             </select>
                             <Button
                               size="sm"
-                              onClick={() => {
+                              disabled={inviting || !inviteEmail.trim()}
+                              onClick={async () => {
                                 if (!inviteEmail.trim())
                                   return toast.error("Add an email first");
-                                toast.success(`Invite sent to ${inviteEmail}`);
-                                setInviteEmail("");
+                                setInviting(true);
+                                const { inviteTeammate } = await import(
+                                  "@/lib/auth/invite"
+                                );
+                                const result = await inviteTeammate({
+                                  email: inviteEmail.trim(),
+                                  role: inviteRole,
+                                });
+                                setInviting(false);
+                                if (result.ok) {
+                                  toast.success(result.message);
+                                  setInviteEmail("");
+                                } else {
+                                  toast.error(result.message);
+                                }
                               }}
                             >
-                              Invite
+                              {inviting ? "Sending…" : "Invite"}
                             </Button>
                           </div>
                           <div className="overflow-hidden rounded-md border">

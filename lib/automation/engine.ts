@@ -260,6 +260,17 @@ async function evaluateRules(
         } as object;
       });
 
+      // Mirror to Postgres (run + counter bump on the rule)
+      const persistedRule = (
+        store.getState() as { automations: AutomationRule[] }
+      ).automations.find((r) => r.id === rule.id);
+      void import("@/lib/db/recordSync").then(
+        ({ syncAutomationRunInsert, syncAutomationUpsert }) => {
+          void syncAutomationRunInsert(run, rule.organizationId);
+          if (persistedRule) void syncAutomationUpsert(persistedRule);
+        },
+      );
+
       if (status === "success") {
         toast.success(`⚡ ${rule.name}`, {
           description: `Triggered on ${run.triggerSummary} · ${results.length} action${results.length === 1 ? "" : "s"} ran`,
