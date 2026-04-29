@@ -1,12 +1,27 @@
 "use client";
 
+import { useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { format, parseISO } from "date-fns";
-import { File, FileImage, FileVideo, FileText, Upload, Download } from "lucide-react";
+import {
+  File,
+  FileImage,
+  FileVideo,
+  FileText,
+  Upload,
+  Download,
+  Loader2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useStore } from "@/lib/db/store";
 import { UserAvatar } from "@/components/UserAvatar";
 import { EmptyState } from "@/components/EmptyState";
+import {
+  uploadProjectFile,
+  getSignedDownloadUrl,
+} from "@/lib/db/fileSync";
+import { useRuntimeConfig } from "@/lib/config/runtime";
+import { toast } from "sonner";
 
 function bytes(n: number) {
   if (n < 1024) return `${n} B`;
@@ -27,6 +42,61 @@ export default function FilesPage() {
   const files = useStore((s) => s.files);
   const projects = useStore((s) => s.projects);
   const users = useStore((s) => s.users);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const cfg = useRuntimeConfig();
+  const connected = cfg.useSupabase && cfg.supabaseUrl && cfg.supabaseAnonKey;
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const fileList = e.target.files;
+    if (!fileList || fileList.length === 0) return;
+    if (projects.length === 0) {
+      toast.error("Create a project first to attach files");
+      return;
+    }
+    // For now, attach to the first active project. A future enhancement
+    // is a project picker per upload.
+    const targetProject =
+      projects.find((p) => p.status === "active") ?? projects[0];
+    setUploading(true);
+    let okCount = 0;
+    let firstError: string | null = null;
+    for (const file of Array.from(fileList)) {
+      const result = await uploadProjectFile(targetProject.id, file);
+      if (result.ok) okCount++;
+      else if (!firstError) firstError = result.message;
+    }
+    setUploading(false);
+    if (firstError) {
+      toast.error(firstError);
+    } else {
+      toast.success(
+        `Uploaded ${okCount} file${okCount === 1 ? "" : "s"} to ${targetProject.name}`,
+        connected
+          ? undefined
+          : { description: "Demo mode — file is in-memory only" },
+      );
+    }
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleDownload = async (storagePath: string | undefined, fileName: string) => {
+    if (!storagePath) {
+      toast.info("Demo file — no real bytes to download");
+      return;
+    }
+    const url = await getSignedDownloadUrl(storagePath);
+    if (!url) {
+      toast.error("Couldn't generate signed URL");
+      return;
+    }
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-[1400px] mx-auto">
@@ -43,9 +113,24 @@ export default function FilesPage() {
             All deliverables across your projects
           </p>
         </div>
-        <Button>
-          <Upload className="size-4" /> Upload
+        <Button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading}
+        >
+          {uploading ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Upload className="size-4" />
+          )}
+          {uploading ? "Uploading…" : "Upload"}
         </Button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          onChange={handleUpload}
+          className="hidden"
+        />
       </motion.div>
 
       <div className="overflow-hidden rounded-lg border bg-card">
@@ -112,7 +197,12 @@ export default function FilesPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <Button variant="ghost" size="icon" aria-label="Download">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Download"
+                      onClick={() => handleDownload(f.storagePath, f.fileName)}
+                    >
                       <Download className="size-4" />
                     </Button>
                   </td>

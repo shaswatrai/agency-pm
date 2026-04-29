@@ -185,6 +185,8 @@ export interface ProjectFile {
   uploadedBy?: string;
   clientVisible: boolean;
   createdAt: string;
+  /** Storage path inside the `project-files` bucket; undefined for in-memory demo files. */
+  storagePath?: string;
 }
 
 // ----------------------------------------------------------------------------

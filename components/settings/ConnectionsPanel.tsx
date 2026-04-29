@@ -229,6 +229,17 @@ export function ConnectionsPanel() {
               disabled={!supabaseConnected}
               onCheckedChange={(checked) => {
                 config.setField("useSupabase", checked);
+                // Mirror to a cookie so the SSR middleware can gate
+                // /[orgSlug]/* without reading localStorage.
+                if (typeof document !== "undefined") {
+                  if (checked) {
+                    document.cookie =
+                      "atelier-mode=supabase; path=/; max-age=31536000; samesite=lax";
+                  } else {
+                    document.cookie =
+                      "atelier-mode=; path=/; max-age=0; samesite=lax";
+                  }
+                }
                 toast.success(
                   checked ? "Switched to Connected mode" : "Switched to Demo mode",
                 );
@@ -496,6 +507,10 @@ export function ConnectionsPanel() {
           onClick={() => {
             if (confirm("Clear all stored credentials? This can't be undone.")) {
               useRuntimeConfig.getState().reset();
+              if (typeof document !== "undefined") {
+                document.cookie =
+                  "atelier-mode=; path=/; max-age=0; samesite=lax";
+              }
               toast.success("Reset to demo mode");
             }
           }}

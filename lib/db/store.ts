@@ -222,6 +222,33 @@ export const useStore = create<Store>((set, get) => ({
     void import("@/lib/db/taskSync").then(({ syncTaskUpdate }) =>
       syncTaskUpdate(taskId, patch),
     );
+    const interestingKeys = [
+      "title",
+      "status",
+      "priority",
+      "dueDate",
+      "assigneeIds",
+    ] as const;
+    const changed = interestingKeys.find(
+      (k) => (patch as Partial<Task>)[k] !== undefined,
+    );
+    if (changed) {
+      const meta: Record<string, unknown> = {};
+      if (patch.title !== undefined) meta.title = patch.title;
+      if (patch.status !== undefined) meta.status = patch.status;
+      if (patch.priority !== undefined) meta.priority = patch.priority;
+      if (patch.dueDate !== undefined) meta.dueDate = patch.dueDate;
+      if (patch.assigneeIds !== undefined)
+        meta.assigneeCount = patch.assigneeIds.length;
+      void import("@/lib/db/activitySync").then(({ logActivity }) =>
+        logActivity({
+          entityType: "task",
+          entityId: taskId,
+          action: `${changed}_changed`,
+          metadata: meta,
+        }),
+      );
+    }
   },
 
   addTask: (task) => {
@@ -265,6 +292,13 @@ export const useStore = create<Store>((set, get) => ({
     void import("@/lib/db/taskSync").then(({ syncTaskDelete }) =>
       syncTaskDelete(taskId),
     );
+    void import("@/lib/db/activitySync").then(({ logActivity }) =>
+      logActivity({
+        entityType: "task",
+        entityId: taskId,
+        action: "deleted",
+      }),
+    );
   },
 
   duplicateTask: (taskId) => {
@@ -300,6 +334,14 @@ export const useStore = create<Store>((set, get) => ({
     void import("@/lib/db/taskSync").then(({ syncTaskInsert }) =>
       syncTaskInsert(copy),
     );
+    void import("@/lib/db/activitySync").then(({ logActivity }) =>
+      logActivity({
+        entityType: "task",
+        entityId: copy.id,
+        action: "duplicated",
+        metadata: { fromTaskId: original.id },
+      }),
+    );
     return copy;
   },
 
@@ -316,6 +358,14 @@ export const useStore = create<Store>((set, get) => ({
     set((state) => ({ clients: [...state.clients, newClient] }));
     void import("@/lib/db/recordSync").then(({ syncClientInsert }) =>
       syncClientInsert(newClient),
+    );
+    void import("@/lib/db/activitySync").then(({ logActivity }) =>
+      logActivity({
+        entityType: "client",
+        entityId: newClient.id,
+        action: "created",
+        metadata: { name: newClient.name },
+      }),
     );
     return newClient;
   },
@@ -346,6 +396,14 @@ export const useStore = create<Store>((set, get) => ({
     set((state) => ({ projects: [...state.projects, newProject] }));
     void import("@/lib/db/recordSync").then(({ syncProjectInsert }) =>
       syncProjectInsert(newProject),
+    );
+    void import("@/lib/db/activitySync").then(({ logActivity }) =>
+      logActivity({
+        entityType: "project",
+        entityId: newProject.id,
+        action: "created",
+        metadata: { name: newProject.name, type: newProject.type },
+      }),
     );
     return newProject;
   },
@@ -434,6 +492,18 @@ export const useStore = create<Store>((set, get) => ({
           : inv,
       ),
     }));
+    void import("@/lib/db/activitySync").then(({ logActivity }) =>
+      logActivity({
+        entityType: "invoice",
+        entityId: id,
+        action:
+          status === "sent"
+            ? "sent"
+            : status === "paid"
+              ? "paid"
+              : `status_${status}`,
+      }),
+    );
   },
 
   toggleAutomation: (id) => {
@@ -609,6 +679,19 @@ export const useStore = create<Store>((set, get) => ({
       await recordSync.syncTasksInsert(tasks);
     })();
 
+    void import("@/lib/db/activitySync").then(({ logActivity }) =>
+      logActivity({
+        entityType: "project",
+        entityId: project.id,
+        action: "converted_from_quote",
+        metadata: {
+          quoteNumber: quote.number,
+          phaseCount: phases.length,
+          taskCount: tasks.length,
+        },
+      }),
+    );
+
     return project;
   },
 
@@ -636,6 +719,16 @@ export const useStore = create<Store>((set, get) => ({
           : ts,
       ),
     }));
+    void import("@/lib/db/activitySync").then(({ logActivity }) =>
+      logActivity({
+        entityType: "task",
+        entityId: id,
+        action: `timesheet_${status}`,
+        metadata: {
+          rejectionReason: review?.rejectionReason,
+        },
+      }),
+    );
   },
 
   setUserSkill: (userId, skill, proficiency) => {
@@ -703,16 +796,19 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   reviewBudgetChange: (id, status, reviewerId, reviewNote) => {
+    let projectId: string | undefined;
+    let delta = 0;
     set((state) => {
       const req = state.budgetChanges.find((r) => r.id === id);
       if (!req) return state;
+      projectId = req.projectId;
+      delta = req.delta;
       const reviewedAt = new Date().toISOString();
       const nextRequests = state.budgetChanges.map((r) =>
         r.id === id
           ? { ...r, status, reviewedAt, reviewedBy: reviewerId, reviewNote }
           : r,
       );
-      // If approved, apply to project budget
       if (status === "approved") {
         return {
           budgetChanges: nextRequests,
@@ -725,6 +821,16 @@ export const useStore = create<Store>((set, get) => ({
       }
       return { budgetChanges: nextRequests };
     });
+    if (projectId) {
+      void import("@/lib/db/activitySync").then(({ logActivity }) =>
+        logActivity({
+          entityType: "project",
+          entityId: projectId!,
+          action: `budget_change_${status}`,
+          metadata: { delta, reviewNote },
+        }),
+      );
+    }
   },
 
   setTimeTrackingConfig: (patch) => {

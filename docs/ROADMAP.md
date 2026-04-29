@@ -56,20 +56,27 @@ Goal: enable Connected mode to actually persist data.
 - ✅ Mounted in `<SupabaseHydration />` — fires after initial fetch finishes
 - ✅ `BroadcastChannel` sync auto-skips when Connected mode is on so we don't double-update
 
-**Done in chunk 4 partial (activity log + real emails):**
+**Done in chunk 4 (full):**
 
 - ✅ `lib/db/activitySync.ts` — `logActivity({entityType, entityId, action, metadata})` writes to in-memory `activityEvents` slice and mirrors to Postgres `activity_log` when Connected
-- ✅ Activity events auto-written on: task created, task status change (special-cases `completed` and `moved_to_review`), comment added, time logged
-- ✅ Dashboard `<ActivityFeed />` prefers real `activityEvents` from the store over the hardcoded demo seed; header label flips to "Live" when real events are present
-- ✅ Automation engine `send_email` action actually sends via `/api/email/send` when Resend is configured: resolves recipient (assignee for task events, PM for project events), composes minimal HTML, fires the real Resend call. Unconfigured Resend → `noop` with reason in the run log.
+- ✅ Activity log retrofit across the meaningful mutations:
+  - `addTask` → `created`; `moveTask` → `completed` / `moved_to_review` / `status_changed`; `updateTask` → `<field>_changed` per interesting field; `removeTask` → `deleted`; `duplicateTask` → `duplicated`
+  - `addComment` → `added` (entity: comment); `addTimeEntry` → `time_logged`
+  - `addClient` → `created` (entity: client); `addProject` → `created` (entity: project); `convertQuoteToProject` → `converted_from_quote`
+  - `updateInvoiceStatus` → `sent` / `paid` / `status_<x>` (entity: invoice)
+  - `setTimesheetStatus` → `timesheet_<status>`
+  - `reviewBudgetChange` → `budget_change_<status>` (entity: project)
+- ✅ Dashboard `<ActivityFeed />` prefers real `activityEvents` over the hardcoded demo seed; header label flips to "Live" when real events are present
+- ✅ Automation engine `send_email` action actually sends via `/api/email/send` when Resend is configured: resolves recipient (assignee for task events, PM for project events), composes minimal HTML, fires the real Resend call
+- ✅ **Supabase Storage uploads** (`lib/db/fileSync.ts`): per-project bucket `project-files/<orgId>/<projectId>/<fileId>-<name>`, real upload from the Files page (multi-file picker, loading spinner), `files` table row insert, signed-URL downloads (1-hour TTL). Bucket declared in `supabase/config.toml`. Hydration pulls existing `files` rows on Connected mode.
+- ✅ **SSR session gating** (`proxy.ts`, the renamed-from-middleware Next.js 16 convention): `/[orgSlug]/*` paths require a Supabase auth cookie when `atelier-mode=supabase` is set. Demo mode passes through. Public paths (`/login`, `/signup`, `/accept-invite`, `/share`, `/portal`, `/api/*`) skip the gate. Connections panel writes / clears the `atelier-mode` cookie when toggling Connected mode + on Reset.
 
 **Remaining (chunk 5):**
 
-- ⛔ Supabase Storage uploads (per-project bucket; replaces the in-memory `files` slice)
-- ⛔ SSR cookie middleware that gates `/[orgSlug]/*` (today gating is client-side)
-- ⛔ Activity log retrofit across remaining mutations (List inline pickers, Kanban context-menu, invoice send/mark-paid, budget change approval, etc.)
 - ⛔ Update flows for projects / clients / phases dual-written (inserts done)
 - ⛔ Quotes / invoices / automations / automation_runs / timesheet submissions / FX / budget changes / user skills tables added to the migration (these slices are still in-memory only)
+- ⛔ Per-project file scoping in the Files page UI (today the upload picks the first active project; needs a project chooser per upload)
+- ⛔ Tighter Storage RLS policies (today the `project-files` bucket is private but objects are visible to any authenticated user; restrict to org members)
 
 ## Pass 3 — Phase 2 finish (financial) [DONE]
 

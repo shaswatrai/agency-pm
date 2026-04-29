@@ -29,6 +29,12 @@ port = 54324
 enabled = true
 file_size_limit = "50MiB"
 
+# Per-project file bucket. Visibility is gated by RLS on the `files`
+# table; downloads use signed URLs.
+[storage.buckets.project-files]
+public = false
+file_size_limit = "50MiB"
+
 [auth]
 enabled = true
 site_url = "http://localhost:3000"
