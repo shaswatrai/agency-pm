@@ -45,6 +45,9 @@ import type {
   RecurrenceFreq,
   RecurringTaskRule,
   RecurringTaskTemplate,
+  SlaHoursKind,
+  SlaPolicy,
+  SlaTier,
   RoundingRule,
   SkillProficiency,
   Task,
@@ -273,6 +276,36 @@ export async function hydrateFromSupabase(
     .from("user_skills")
     .select("*")
     .eq("organization_id", orgId);
+
+  // 16c. SLA policies
+  const { data: slaRaw } = await supabase
+    .from("sla_policies")
+    .select("*")
+    .eq("organization_id", orgId);
+  type DbSlaPolicy = {
+    id: string;
+    organization_id: string;
+    client_id: string | null;
+    name: string;
+    is_active: boolean;
+    hours_kind: SlaHoursKind;
+    tiers: SlaTier[];
+    escalation_user_ids: string[];
+    created_at: string;
+  };
+  const slaPolicies: SlaPolicy[] = ((slaRaw ?? []) as DbSlaPolicy[]).map(
+    (p) => ({
+      id: p.id,
+      organizationId: p.organization_id,
+      clientId: p.client_id ?? undefined,
+      name: p.name,
+      isActive: p.is_active,
+      hoursKind: p.hours_kind,
+      tiers: p.tiers ?? [],
+      escalationUserIds: p.escalation_user_ids ?? [],
+      createdAt: p.created_at,
+    }),
+  );
 
   // 16b. Recurring task rules
   const { data: recurringRaw } = await supabase
@@ -800,6 +833,7 @@ export async function hydrateFromSupabase(
     timeTrackingConfig,
     taskDependencies,
     recurringRules,
+    slaPolicies,
   }));
 
   return {
@@ -822,6 +856,7 @@ export async function hydrateFromSupabase(
       userSkills: userSkills.length,
       taskDependencies: taskDependencies.length,
       recurringRules: recurringRules.length,
+      slaPolicies: slaPolicies.length,
     },
   };
 }

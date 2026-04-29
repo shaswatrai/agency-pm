@@ -42,6 +42,7 @@ import type {
   Quote,
   QuoteStatus,
   RecurringTaskRule,
+  SlaPolicy,
   Task,
   TaskDependency,
   TimeEntry,
@@ -66,6 +67,7 @@ interface Store {
   files: ProjectFile[];
   taskDependencies: TaskDependency[];
   recurringRules: RecurringTaskRule[];
+  slaPolicies: SlaPolicy[];
   invoices: Invoice[];
   automations: AutomationRule[];
   automationRuns: AutomationRun[];
@@ -113,6 +115,12 @@ interface Store {
   toggleRecurringRule: (id: string) => void;
   removeRecurringRule: (id: string) => void;
   markRecurringRuleRun: (id: string, runAt: string) => void;
+  // SLA ops
+  addSlaPolicy: (
+    policy: Omit<SlaPolicy, "id" | "organizationId" | "createdAt">,
+  ) => SlaPolicy;
+  updateSlaPolicy: (id: string, patch: Partial<SlaPolicy>) => void;
+  removeSlaPolicy: (id: string) => void;
   // client ops
   addClient: (client: Omit<Client, "id" | "organizationId" | "code" | "createdAt">) => Client;
   updateClient: (clientId: string, patch: Partial<Client>) => void;
@@ -206,6 +214,7 @@ export const useStore = create<Store>((set, get) => ({
   files: FILES,
   taskDependencies: [],
   recurringRules: [],
+  slaPolicies: [],
   invoices: INVOICES,
   automations: AUTOMATIONS,
   automationRuns: [],
@@ -516,6 +525,49 @@ export const useStore = create<Store>((set, get) => ({
         syncRecurringRuleUpsert(updated),
       );
     }
+  },
+
+  addSlaPolicy: (policy) => {
+    const newPolicy: SlaPolicy = {
+      ...policy,
+      id: uuidOrFallback("sla"),
+      organizationId: get().organization.id,
+      createdAt: new Date().toISOString(),
+    };
+    set((s) => ({ slaPolicies: [...s.slaPolicies, newPolicy] }));
+    void import("@/lib/db/recordSync").then(({ syncSlaPolicyUpsert }) =>
+      syncSlaPolicyUpsert(newPolicy),
+    );
+    void import("@/lib/db/activitySync").then(({ logActivity }) =>
+      logActivity({
+        entityType: "client",
+        entityId: newPolicy.clientId ?? newPolicy.organizationId,
+        action: "sla_policy_created",
+        metadata: { name: newPolicy.name },
+      }),
+    );
+    return newPolicy;
+  },
+
+  updateSlaPolicy: (id, patch) => {
+    set((s) => ({
+      slaPolicies: s.slaPolicies.map((p) =>
+        p.id === id ? { ...p, ...patch } : p,
+      ),
+    }));
+    const updated = get().slaPolicies.find((p) => p.id === id);
+    if (updated) {
+      void import("@/lib/db/recordSync").then(({ syncSlaPolicyUpsert }) =>
+        syncSlaPolicyUpsert(updated),
+      );
+    }
+  },
+
+  removeSlaPolicy: (id) => {
+    set((s) => ({ slaPolicies: s.slaPolicies.filter((p) => p.id !== id) }));
+    void import("@/lib/db/recordSync").then(({ syncSlaPolicyDelete }) =>
+      syncSlaPolicyDelete(id),
+    );
   },
 
   addClient: (client) => {

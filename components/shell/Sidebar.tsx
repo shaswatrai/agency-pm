@@ -21,6 +21,7 @@ import {
   FileSignature,
   GraduationCap,
   Wallet,
+  Timer,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -96,6 +97,7 @@ export function Sidebar({ variant = "static", onNavigate }: SidebarProps) {
     },
     { href: `/${orgSlug}/files`, label: "Files", icon: FileBox },
     { href: `/${orgSlug}/automations`, label: "Automations", icon: Zap },
+    { href: `/${orgSlug}/sla`, label: "SLA dashboard", icon: Timer },
     { href: `/${orgSlug}/reports`, label: "Reports", icon: BarChart3 },
   ];
 

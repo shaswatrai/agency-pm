@@ -39,6 +39,7 @@ import { AssigneePicker } from "@/components/views/AssigneePicker";
 import { DueDatePicker } from "@/components/views/DueDatePicker";
 import { SubtaskList } from "@/components/views/SubtaskList";
 import { DependencyPicker } from "@/components/views/DependencyPicker";
+import { SlaChip } from "@/components/views/SlaChip";
 import { useStore, useCurrentUser } from "@/lib/db/store";
 import { cn } from "@/lib/utils";
 import {
@@ -237,6 +238,7 @@ export function TaskDetailDrawer({
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <StatusPill status={task.status} />
                 <PriorityPill priority={task.priority} />
+                <SlaChip taskId={task.id} />
                 {task.taskType ? (
                   <span className="rounded-pill bg-muted px-2 py-0.5 text-xs text-muted-foreground">
                     {task.taskType}

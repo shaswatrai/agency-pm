@@ -29,6 +29,7 @@ import type {
   QuoteVersion,
   RecurringTaskRule,
   SkillProficiency,
+  SlaPolicy,
   Task,
   TaskDependency,
   TimeEntry,
@@ -636,6 +637,30 @@ export async function syncRecurringRuleDelete(id: string): Promise<void> {
     .delete()
     .eq("id", id);
   warn("Recurring rule delete", error);
+}
+
+// ── SLA policies ──────────────────────────────────────────────────────
+export async function syncSlaPolicyUpsert(policy: SlaPolicy): Promise<void> {
+  const supabase = getClient();
+  if (!supabase) return;
+  const { error } = await supabase.from("sla_policies").upsert({
+    id: policy.id,
+    organization_id: policy.organizationId,
+    client_id: policy.clientId ?? null,
+    name: policy.name,
+    is_active: policy.isActive,
+    hours_kind: policy.hoursKind,
+    tiers: policy.tiers,
+    escalation_user_ids: policy.escalationUserIds,
+  });
+  warn("SLA policy upsert", error);
+}
+
+export async function syncSlaPolicyDelete(id: string): Promise<void> {
+  const supabase = getClient();
+  if (!supabase) return;
+  const { error } = await supabase.from("sla_policies").delete().eq("id", id);
+  warn("SLA policy delete", error);
 }
 
 // ── Tasks bulk insert (for quote→project conversion) ──────────────────

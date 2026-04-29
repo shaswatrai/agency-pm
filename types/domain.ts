@@ -181,6 +181,48 @@ export interface RecurringTaskTemplate {
   dueOffsetDays?: number;
 }
 
+// ----------------------------------------------------------------------------
+// SLA module (PRD §5.14)
+// ----------------------------------------------------------------------------
+export type SlaHoursKind = "business_hours" | "calendar";
+
+export interface SlaTier {
+  /** Matches Task.priority */
+  priority: TaskPriority;
+  /** First-response window: createdAt → first move out of `todo` */
+  responseHours: number;
+  /** Resolution window: createdAt → status === "done" */
+  resolutionHours: number;
+}
+
+export interface SlaPolicy {
+  id: string;
+  organizationId: string;
+  /** null = org-wide default; otherwise overrides for this client */
+  clientId?: string;
+  name: string;
+  isActive: boolean;
+  hoursKind: SlaHoursKind;
+  tiers: SlaTier[];
+  /** User ids notified on breach */
+  escalationUserIds: string[];
+  createdAt: string;
+}
+
+export type SlaState = "no_policy" | "ok" | "at_risk" | "breached" | "met";
+
+export interface SlaIncidentSnapshot {
+  taskId: string;
+  policyId: string;
+  tier: SlaTier;
+  responseDeadline: string; // ISO
+  resolutionDeadline: string; // ISO
+  responseState: SlaState;
+  resolutionState: SlaState;
+  /** Hours remaining until next deadline (negative if breached) */
+  hoursToNextDeadline: number;
+}
+
 export interface RecurringTaskRule {
   id: string;
   organizationId: string;

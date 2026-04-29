@@ -19,11 +19,13 @@ import {
   Sparkles,
   Plug2,
   Repeat,
+  Timer,
 } from "lucide-react";
 import { ConnectionsPanel } from "@/components/settings/ConnectionsPanel";
 import { WorkspacePanel } from "@/components/settings/WorkspacePanel";
 import { TimeTrackingPanel } from "@/components/settings/TimeTrackingPanel";
 import { RecurringRulesPanel } from "@/components/settings/RecurringRulesPanel";
+import { SlaPoliciesPanel } from "@/components/settings/SlaPoliciesPanel";
 import { useStore } from "@/lib/db/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -69,6 +71,13 @@ const SECTIONS: Section[] = [
     title: "Recurring tasks",
     description:
       "Auto-generate tasks on a daily / weekly / monthly schedule (retainers, QA passes)",
+  },
+  {
+    key: "sla",
+    icon: Timer,
+    title: "SLA policies",
+    description:
+      "First-response and resolution targets per priority — org-wide default + per-client overrides",
   },
   {
     key: "members",
@@ -204,6 +213,8 @@ export default function SettingsPage() {
                       {s.key === "time" && <TimeTrackingPanel />}
 
                       {s.key === "recurring" && <RecurringRulesPanel />}
+
+                      {s.key === "sla" && <SlaPoliciesPanel />}
 
                       {s.key === "members" && (
                         <div className="space-y-4">
