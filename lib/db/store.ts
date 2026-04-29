@@ -25,6 +25,7 @@ import {
   USERS,
 } from "@/lib/db/seed";
 import type {
+  ActivityEvent,
   AutomationRule,
   AutomationRun,
   BudgetChangeRequest,
@@ -63,6 +64,7 @@ interface Store {
   invoices: Invoice[];
   automations: AutomationRule[];
   automationRuns: AutomationRun[];
+  activityEvents: ActivityEvent[];
   quotes: Quote[];
   timesheetSubmissions: TimesheetSubmission[];
   skills: string[];
@@ -173,6 +175,7 @@ export const useStore = create<Store>((set, get) => ({
   invoices: INVOICES,
   automations: AUTOMATIONS,
   automationRuns: [],
+  activityEvents: [],
   quotes: QUOTES,
   timesheetSubmissions: TIMESHEET_SUBMISSIONS,
   skills: SKILLS,
@@ -190,9 +193,21 @@ export const useStore = create<Store>((set, get) => ({
           : t,
       ),
     }));
-    // Mirror to Supabase if Connected mode
     void import("@/lib/db/taskSync").then(({ syncTaskUpdate }) =>
       syncTaskUpdate(taskId, { status, position }),
+    );
+    void import("@/lib/db/activitySync").then(({ logActivity }) =>
+      logActivity({
+        entityType: "task",
+        entityId: taskId,
+        action:
+          status === "done"
+            ? "completed"
+            : status === "in_review"
+              ? "moved_to_review"
+              : "status_changed",
+        metadata: { status },
+      }),
     );
   },
 
@@ -229,6 +244,14 @@ export const useStore = create<Store>((set, get) => ({
     set((state) => ({ tasks: [...state.tasks, newTask] }));
     void import("@/lib/db/taskSync").then(({ syncTaskInsert }) =>
       syncTaskInsert(newTask),
+    );
+    void import("@/lib/db/activitySync").then(({ logActivity }) =>
+      logActivity({
+        entityType: "task",
+        entityId: newTask.id,
+        action: "created",
+        metadata: { title: newTask.title, projectId: newTask.projectId },
+      }),
     );
     return newTask;
   },
@@ -337,6 +360,17 @@ export const useStore = create<Store>((set, get) => ({
     void import("@/lib/db/recordSync").then(({ syncTimeEntryInsert }) =>
       syncTimeEntryInsert(newEntry, orgId),
     );
+    void import("@/lib/db/activitySync").then(({ logActivity }) =>
+      logActivity({
+        entityType: "task",
+        entityId: newEntry.taskId,
+        action: "time_logged",
+        metadata: {
+          minutes: newEntry.durationMinutes,
+          billable: newEntry.billable,
+        },
+      }),
+    );
     return newEntry;
   },
 
@@ -352,6 +386,14 @@ export const useStore = create<Store>((set, get) => ({
     const orgId = get().organization.id;
     void import("@/lib/db/recordSync").then(({ syncCommentInsert }) =>
       syncCommentInsert(newComment, orgId),
+    );
+    void import("@/lib/db/activitySync").then(({ logActivity }) =>
+      logActivity({
+        entityType: "comment",
+        entityId: newComment.id,
+        action: "added",
+        metadata: { taskId: newComment.taskId, body: newComment.body.slice(0, 80) },
+      }),
     );
     return newComment;
   },

@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { useRuntimeConfig } from "@/lib/config/runtime";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { hydrateFromSupabase } from "@/lib/db/hydrateFromSupabase";
+import { startRealtime, stopRealtime } from "@/lib/db/realtime";
 import { getPrimaryOrg } from "@/lib/auth";
 
 /**
@@ -37,6 +38,8 @@ export function SupabaseHydration() {
         toast.success("Loaded workspace from Supabase", {
           description: `${result.counts?.tasks ?? 0} tasks · ${result.counts?.projects ?? 0} projects · ${result.counts?.clients ?? 0} clients`,
         });
+        // Start realtime once initial state is loaded.
+        startRealtime(supabase, org.id);
         setHydrated(true);
       } else {
         toast.error(`Hydration failed: ${result.message}`);
@@ -45,6 +48,8 @@ export function SupabaseHydration() {
 
     return () => {
       cancelled = true;
+      const supabase = getSupabaseBrowser();
+      if (supabase) stopRealtime(supabase);
     };
   }, [useSupabase, url, anon, hydrated]);
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useStore } from "@/lib/db/store";
+import { useRuntimeConfig } from "@/lib/config/runtime";
 
 const CHANNEL_NAME = "atelier-sync";
 
@@ -75,9 +76,14 @@ export function initSync(onPresenceChange: () => void) {
   const ch = ensureChannel();
   if (!ch) return;
 
+  // Connected mode bypasses BroadcastChannel entirely and relies on
+  // Supabase Realtime for cross-tab/cross-browser sync.
+  const isConnected = () => useRuntimeConfig.getState().useSupabase;
+
   // Subscribe to store changes and broadcast each slice when it changes.
   let prev = useStore.getState();
   useStore.subscribe((state) => {
+    if (isConnected()) return; // Supabase Realtime handles it
     for (const slice of SYNC_SLICES) {
       if (state[slice] !== prev[slice]) {
         const msg: SliceMessage = {

@@ -50,16 +50,26 @@ Goal: enable Connected mode to actually persist data.
 - ✅ Hydration extended to fetch `comments` + `time_entries` from Postgres; recomputes `task.commentCount` and `task.actualHours` from real rows
 - ✅ Demo seed extended: comments + time entries on first signup populate the `My Tasks` and `Timesheet` pages with real data the user can build on
 
-**Remaining chunks:**
+**Done in chunk 3 (Realtime):**
 
-- ⛔ **Chunk 3 — Realtime**: `supabase.channel(...)` subscriptions on `tasks` + `comments` + `time_entries` replace the `BroadcastChannel` transport
-- ⛔ **Chunk 4 — Storage + emails + activity log + SSR session**:
-  - File uploads land in Supabase Storage with the per-project bucket pattern
-  - Real Resend sends fire on: invite, mention, milestone-approved, invoice sent
-  - Activity log auto-generated on every server action; dashboard + project Activity tab read it
-  - SSR cookie middleware gates `/[orgSlug]/*` (today the gating is client-side only)
-- ⛔ Dual-write update flows for projects / clients (currently inserts only)
-- ⛔ Quotes / invoices / automations / timesheet submissions / FX / budget changes / skills tables in the migration (today these slices are still in-memory only)
+- ✅ `lib/db/realtime.ts` — `supabase.channel("org:<id>")` subscription with `postgres_changes` listeners on `tasks` (INSERT / UPDATE / DELETE), `comments` (INSERT), `time_entries` (INSERT), and `task_assignees` (INSERT / DELETE). Echo dedupe by id check.
+- ✅ Mounted in `<SupabaseHydration />` — fires after initial fetch finishes
+- ✅ `BroadcastChannel` sync auto-skips when Connected mode is on so we don't double-update
+
+**Done in chunk 4 partial (activity log + real emails):**
+
+- ✅ `lib/db/activitySync.ts` — `logActivity({entityType, entityId, action, metadata})` writes to in-memory `activityEvents` slice and mirrors to Postgres `activity_log` when Connected
+- ✅ Activity events auto-written on: task created, task status change (special-cases `completed` and `moved_to_review`), comment added, time logged
+- ✅ Dashboard `<ActivityFeed />` prefers real `activityEvents` from the store over the hardcoded demo seed; header label flips to "Live" when real events are present
+- ✅ Automation engine `send_email` action actually sends via `/api/email/send` when Resend is configured: resolves recipient (assignee for task events, PM for project events), composes minimal HTML, fires the real Resend call. Unconfigured Resend → `noop` with reason in the run log.
+
+**Remaining (chunk 5):**
+
+- ⛔ Supabase Storage uploads (per-project bucket; replaces the in-memory `files` slice)
+- ⛔ SSR cookie middleware that gates `/[orgSlug]/*` (today gating is client-side)
+- ⛔ Activity log retrofit across remaining mutations (List inline pickers, Kanban context-menu, invoice send/mark-paid, budget change approval, etc.)
+- ⛔ Update flows for projects / clients / phases dual-written (inserts done)
+- ⛔ Quotes / invoices / automations / automation_runs / timesheet submissions / FX / budget changes / user skills tables added to the migration (these slices are still in-memory only)
 
 ## Pass 3 — Phase 2 finish (financial) [DONE]
 

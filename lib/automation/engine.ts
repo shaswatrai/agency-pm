@@ -289,11 +289,66 @@ async function executeAction(
       };
     }
     case "send_email": {
-      // Pass 2 (Resend wiring) replaces this with a real call.
-      return {
-        outcome: "noop",
-        detail: "Email queued (real send wires up in Pass 2)",
-      };
+      // Resolve recipient: assignee for task events, PM for project
+      // events. Builds a minimal HTML body from the event summary.
+      const stateNow = store.getState() as StoreState;
+      let toAddress: string | null = null;
+      const subject = `Atelier · ${action.label}`;
+      let body = `<p>This automation ran for: <strong>${summarizeEvent(event)}</strong></p>`;
+
+      if (event.type === "task_status_change" || event.type === "task_created") {
+        const task = event.task;
+        const assigneeIds = task.assigneeIds ?? [];
+        const assignee = stateNow.users.find((u) => assigneeIds.includes(u.id));
+        if (assignee && "email" in assignee) {
+          toAddress = (assignee as { email?: string }).email ?? null;
+        }
+      }
+      if (
+        (event.type === "milestone_complete" ||
+          event.type === "budget_threshold") &&
+        event.project
+      ) {
+        const pm = stateNow.users.find(
+          (u) =>
+            "id" in u &&
+            (event as { project: { project_manager_id?: string } }).project &&
+            u.id ===
+              (
+                event.project as unknown as { projectManagerId?: string }
+              ).projectManagerId,
+        );
+        if (pm && "email" in pm) {
+          toAddress = (pm as { email?: string }).email ?? null;
+        }
+      }
+
+      if (!toAddress) {
+        return {
+          outcome: "noop",
+          detail: "No recipient resolved (no email on assignee/PM)",
+        };
+      }
+
+      try {
+        const { sendEmail } = await import("@/lib/db/adapter");
+        const result = await sendEmail({
+          to: toAddress,
+          subject,
+          html: `${body}<p>Atelier automation</p>`,
+        });
+        return {
+          outcome: result.ok ? "ok" : "noop",
+          detail: result.ok
+            ? `Sent to ${toAddress}`
+            : result.message,
+        };
+      } catch (err) {
+        return {
+          outcome: "error",
+          detail: err instanceof Error ? err.message : "send failed",
+        };
+      }
     }
     case "post_slack": {
       return {

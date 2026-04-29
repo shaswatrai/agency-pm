@@ -1,9 +1,10 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, formatDistanceToNow } from "date-fns";
 import {
   CheckCircle2,
+  Clock,
   GitBranch,
   MessageSquare,
   Receipt,
@@ -14,6 +15,7 @@ import {
 import { useStore } from "@/lib/db/store";
 import { cn } from "@/lib/utils";
 import { initials } from "@/lib/utils";
+import type { ActivityEvent } from "@/types/domain";
 
 interface ActivityItem {
   id: string;
@@ -103,8 +105,60 @@ const FEED: ActivityItem[] = [
   },
 ];
 
+function activityToFeedItem(
+  ev: ActivityEvent,
+  tasks: { id: string; title: string }[],
+): ActivityItem {
+  const taskTitle =
+    ev.entityType === "task"
+      ? tasks.find((t) => t.id === ev.entityId)?.title ?? "a task"
+      : null;
+  const metaText = ev.metadata as
+    | { body?: string; minutes?: number }
+    | undefined;
+
+  let type: ActivityItem["type"] = "comment";
+  let body = "performed an action";
+  if (ev.action === "created" && ev.entityType === "task") {
+    type = "task_done";
+    body = `created "${taskTitle}"`;
+  } else if (ev.action === "completed") {
+    type = "task_done";
+    body = `completed "${taskTitle}"`;
+  } else if (
+    ev.action === "moved_to_review" ||
+    ev.action === "status_changed"
+  ) {
+    type = "task_review";
+    body = `updated "${taskTitle}"`;
+  } else if (ev.action === "added" && ev.entityType === "comment") {
+    type = "comment";
+    body = `commented · "${(metaText?.body ?? "").slice(0, 60)}…"`;
+  } else if (ev.action === "time_logged") {
+    type = "task_done";
+    body = `logged ${(metaText?.minutes ?? 0)} min on "${taskTitle}"`;
+  }
+
+  return {
+    id: ev.id,
+    type,
+    actorId: ev.actorId ?? "",
+    body,
+    createdAt: ev.createdAt,
+  };
+}
+
 export function ActivityFeed() {
   const users = useStore((s) => s.users);
+  const events = useStore((s) => s.activityEvents);
+  const tasks = useStore((s) => s.tasks);
+
+  // Prefer real activity events when present; otherwise show the
+  // demo seed so the dashboard isn't empty on a fresh install.
+  const realFeed = events
+    .slice(0, 12)
+    .map((ev) => activityToFeedItem(ev, tasks));
+  const items = realFeed.length > 0 ? realFeed : FEED;
 
   return (
     <div className="rounded-lg border bg-card">
@@ -112,13 +166,15 @@ export function ActivityFeed() {
         <div>
           <h3 className="text-sm font-semibold">Recent activity</h3>
           <p className="text-[11px] text-muted-foreground">
-            Across all your projects
+            {realFeed.length > 0
+              ? "Live across all your projects"
+              : "Demo · across all your projects"}
           </p>
         </div>
         <span className="size-2 rounded-full bg-status-done animate-pulse" />
       </div>
       <ul className="divide-y">
-        {FEED.map((item, i) => {
+        {items.map((item, i) => {
           const user = users.find((u) => u.id === item.actorId);
           const meta = ICON_MAP[item.type];
           return (

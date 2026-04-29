@@ -158,7 +158,7 @@ export interface TimeEntry {
 export interface ActivityEvent {
   id: string;
   actorId?: string;
-  entityType: "project" | "task" | "comment" | "client" | "file";
+  entityType: "project" | "task" | "comment" | "client" | "file" | "invoice";
   entityId: string;
   action: string;
   metadata?: Record<string, unknown>;
