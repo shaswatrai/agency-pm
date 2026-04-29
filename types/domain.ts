@@ -612,3 +612,265 @@ export interface Invoice {
   paidAt?: string;
   sentAt?: string;
 }
+
+// ----------------------------------------------------------------------------
+// Integrations framework (Pass 6 — PRD §5.12, §5.15)
+// ----------------------------------------------------------------------------
+export type IntegrationProviderKind =
+  | "figma"
+  | "adobe_creative_cloud"
+  | "github"
+  | "gitlab"
+  | "bitbucket"
+  | "slack"
+  | "microsoft_teams"
+  | "google_drive"
+  | "dropbox"
+  | "onedrive"
+  | "sharepoint"
+  | "google_ads"
+  | "meta_ads"
+  | "google_analytics"
+  | "google_search_console"
+  | "mailchimp"
+  | "sendgrid"
+  | "hootsuite"
+  | "buffer"
+  | "quickbooks"
+  | "xero"
+  | "freshbooks"
+  | "hubspot"
+  | "salesforce"
+  | "google_calendar"
+  | "outlook_calendar"
+  | "jira_import"
+  | "vercel"
+  | "netlify"
+  | "aws"
+  | "zapier"
+  | "make"
+  | "generic_webhook";
+
+export type IntegrationCategory =
+  | "design"
+  | "code"
+  | "comms"
+  | "storage"
+  | "marketing"
+  | "accounting"
+  | "crm"
+  | "calendar"
+  | "devops"
+  | "hosting"
+  | "gateway";
+
+export type IntegrationCredentialType =
+  | "oauth2"
+  | "api_key"
+  | "personal_access_token"
+  | "basic_auth"
+  | "webhook_secret"
+  | "service_account";
+
+export type IntegrationConnectionStatus =
+  | "pending"
+  | "connected"
+  | "disconnected"
+  | "expired"
+  | "error";
+
+export interface IntegrationProvider {
+  kind: IntegrationProviderKind;
+  displayName: string;
+  category: IntegrationCategory;
+  supportsOauth: boolean;
+  supportsApiKey: boolean;
+  supportsPat: boolean;
+  supportsWebhookIn: boolean;
+  supportsWebhookOut: boolean;
+  defaultScopes: string[];
+  documentationUrl?: string;
+}
+
+/**
+ * Credential metadata. The actual secret never lives here — only the
+ * Vault id (in real mode) or a placeholder (in demo). Browser code
+ * therefore can never access plaintext.
+ */
+export interface IntegrationCredential {
+  id: string;
+  organizationId: string;
+  provider: IntegrationProviderKind;
+  credentialType: IntegrationCredentialType;
+  label: string;
+  /** UUID of vault.secrets row (real mode) or "demo:<id>" sentinel (demo) */
+  vaultSecretId: string;
+  /** Non-secret payload (account ids, expiry hint, refresh-token id, ...) */
+  payloadMeta: Record<string, unknown>;
+  scopes: string[];
+  expiresAt?: string;
+  isActive: boolean;
+  lastValidatedAt?: string;
+  lastValidationMessage?: string;
+  createdBy?: string;
+  createdAt: string;
+}
+
+export interface IntegrationConnection {
+  id: string;
+  organizationId: string;
+  credentialId: string;
+  provider: IntegrationProviderKind;
+  status: IntegrationConnectionStatus;
+  externalAccountId?: string;
+  externalAccountLabel?: string;
+  accountMetadata: Record<string, unknown>;
+  lastSyncedAt?: string;
+  lastError?: string;
+  createdAt: string;
+}
+
+export type IntegrationLinkEntityType =
+  | "task"
+  | "project"
+  | "client"
+  | "phase"
+  | "invoice"
+  | "quote"
+  | "milestone";
+
+export interface IntegrationLink {
+  id: string;
+  organizationId: string;
+  connectionId?: string;
+  provider: IntegrationProviderKind;
+  entityType: IntegrationLinkEntityType;
+  entityId: string;
+  /** Provider-specific resource kind, e.g. "figma_frame", "github_pr". */
+  externalKind: string;
+  externalId: string;
+  externalUrl?: string;
+  metadata: Record<string, unknown>;
+  createdBy?: string;
+  createdAt: string;
+}
+
+export type WebhookDeliveryStatus =
+  | "pending"
+  | "in_flight"
+  | "delivered"
+  | "failed"
+  | "exhausted";
+
+export interface WebhookSubscription {
+  id: string;
+  organizationId: string;
+  name: string;
+  description?: string;
+  targetUrl: string;
+  vaultSecretId: string;
+  /** Glob list. ["*"] = everything. */
+  eventFilter: string[];
+  customHeaders: Record<string, string>;
+  isActive: boolean;
+  retryMax: number;
+  timeoutMs: number;
+  lastDeliveryAt?: string;
+  lastDeliveryStatus?: WebhookDeliveryStatus;
+  createdBy?: string;
+  createdAt: string;
+}
+
+export interface WebhookDelivery {
+  id: string;
+  subscriptionId: string;
+  organizationId: string;
+  eventType: string;
+  eventId: string;
+  idempotencyKey: string;
+  payload: Record<string, unknown>;
+  status: WebhookDeliveryStatus;
+  attemptCount: number;
+  nextAttemptAt: string;
+  lastAttemptAt?: string;
+  responseStatus?: number;
+  responseBody?: string;
+  signature?: string;
+  createdAt: string;
+}
+
+export interface IncomingWebhookEndpoint {
+  id: string;
+  organizationId: string;
+  connectionId?: string;
+  provider: IntegrationProviderKind;
+  endpointToken: string;
+  vaultSecretId?: string;
+  isActive: boolean;
+  lastReceivedAt?: string;
+  createdAt: string;
+}
+
+export interface IncomingWebhookEvent {
+  id: string;
+  endpointId: string;
+  organizationId: string;
+  receivedAt: string;
+  requestHeaders: Record<string, string>;
+  payload: Record<string, unknown>;
+  signatureVerified: boolean;
+  processedAt?: string;
+  processError?: string;
+}
+
+export type IntegrationJobStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export interface IntegrationJob {
+  id: string;
+  organizationId: string;
+  connectionId?: string;
+  kind: string;
+  status: IntegrationJobStatus;
+  payload: Record<string, unknown>;
+  runAt: string;
+  attempts: number;
+  lastError?: string;
+  result?: Record<string, unknown>;
+  createdAt: string;
+}
+
+/**
+ * Canonical event names emitted by the central integrations event bus
+ * and matched against `WebhookSubscription.eventFilter`. Outbound
+ * subscribers (accounting, Zapier, custom) consume these.
+ */
+export const INTEGRATION_EVENT_TYPES = [
+  "task.created",
+  "task.updated",
+  "task.status_changed",
+  "task.completed",
+  "comment.created",
+  "time_entry.created",
+  "time_entry.approved",
+  "invoice.created",
+  "invoice.sent",
+  "invoice.paid",
+  "quote.created",
+  "quote.accepted",
+  "project.created",
+  "project.completed",
+  "milestone.completed",
+  "approval.requested",
+  "approval.granted",
+  "approval.rejected",
+  "client.created",
+  "budget.threshold_hit",
+  "sla.breached",
+] as const;
+
+export type IntegrationEventType = (typeof INTEGRATION_EVENT_TYPES)[number];
