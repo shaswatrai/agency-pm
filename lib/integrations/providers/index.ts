@@ -1,9 +1,13 @@
 import type { IntegrationProviderKind } from "@/types/domain";
 import type { ProviderClient } from "./base";
 import { figmaClient } from "./figma/client";
+import { githubClient } from "./github/client";
+import { gitlabClient } from "./gitlab/client";
 
 const REGISTRY: Partial<Record<IntegrationProviderKind, ProviderClient>> = {
   figma: figmaClient,
+  github: githubClient,
+  gitlab: gitlabClient,
 };
 
 /**

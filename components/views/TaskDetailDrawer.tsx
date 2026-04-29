@@ -41,6 +41,7 @@ import { SubtaskList } from "@/components/views/SubtaskList";
 import { DependencyPicker } from "@/components/views/DependencyPicker";
 import { SlaChip } from "@/components/views/SlaChip";
 import { FigmaFrameLink } from "@/components/integrations/FigmaFrameLink";
+import { RepoLink } from "@/components/integrations/RepoLink";
 import { useStore, useCurrentUser } from "@/lib/db/store";
 import { cn } from "@/lib/utils";
 import {
@@ -307,64 +308,9 @@ export function TaskDetailDrawer({
                     <DependencyPicker taskId={task.id} />
                   </section>
 
-                  {task.repoUrl ? (
-                    <section>
-                      <h3 className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                        <GitBranch className="size-3" /> Pull request
-                      </h3>
-                      <div className="overflow-hidden rounded-lg border bg-card">
-                        <div className="flex items-start gap-3 p-4">
-                          <div className="grid size-9 shrink-0 place-items-center rounded-md bg-status-progress/15 text-status-progress">
-                            <GitBranch className="size-4" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-semibold">
-                              {task.repoUrl
-                                .replace(/^https?:\/\/(www\.)?/, "")
-                                .replace(/\/$/, "")}
-                            </p>
-                            <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                              <span className="inline-flex items-center gap-1 rounded-pill bg-status-done/15 px-1.5 py-0.5 font-medium text-status-done">
-                                <span className="size-1.5 rounded-full bg-status-done" />
-                                Open
-                              </span>
-                              <span>
-                                feat/branch →{" "}
-                                <span className="font-mono">main</span>
-                              </span>
-                            </div>
-                            <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
-                              <span>
-                                <span className="font-mono text-status-done">
-                                  +247
-                                </span>{" "}
-                                <span className="font-mono text-status-blocked">
-                                  −82
-                                </span>
-                              </span>
-                              <span>14 files changed</span>
-                              <span>2 reviewers</span>
-                            </div>
-                          </div>
-                          <a
-                            href={task.repoUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1 rounded-pill bg-status-progress/10 px-2.5 py-1 text-[11px] font-medium text-status-progress hover:bg-status-progress/20"
-                          >
-                            View <ExternalLink className="size-3" />
-                          </a>
-                        </div>
-                        <div className="flex items-center justify-between border-t bg-muted/40 px-3 py-2 text-[11px] text-muted-foreground">
-                          <span className="inline-flex items-center gap-1.5">
-                            <span className="inline-block size-1.5 rounded-full bg-status-done" />
-                            CI passing · 12/12 checks
-                          </span>
-                          <span className="font-mono">a8f3c21 · 4h ago</span>
-                        </div>
-                      </div>
-                    </section>
-                  ) : null}
+                  <section>
+                    <RepoLink task={task} />
+                  </section>
 
                   <section>
                     <FigmaFrameLink task={task} />
