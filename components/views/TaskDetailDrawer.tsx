@@ -42,6 +42,7 @@ import { DependencyPicker } from "@/components/views/DependencyPicker";
 import { SlaChip } from "@/components/views/SlaChip";
 import { FigmaFrameLink } from "@/components/integrations/FigmaFrameLink";
 import { RepoLink } from "@/components/integrations/RepoLink";
+import { StorageLink } from "@/components/integrations/StorageLink";
 import { useStore, useCurrentUser } from "@/lib/db/store";
 import { cn } from "@/lib/utils";
 import {
@@ -314,6 +315,10 @@ export function TaskDetailDrawer({
 
                   <section>
                     <FigmaFrameLink task={task} />
+                  </section>
+
+                  <section>
+                    <StorageLink entityType="task" entityId={task.id} />
                   </section>
 
                     </TabsContent>

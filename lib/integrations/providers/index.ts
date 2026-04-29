@@ -5,6 +5,9 @@ import { githubClient } from "./github/client";
 import { gitlabClient } from "./gitlab/client";
 import { slackClient } from "./slack/client";
 import { teamsClient } from "./microsoft_teams/client";
+import { driveClient } from "./google_drive/client";
+import { dropboxClient } from "./dropbox/client";
+import { onedriveClient } from "./onedrive/client";
 
 const REGISTRY: Partial<Record<IntegrationProviderKind, ProviderClient>> = {
   figma: figmaClient,
@@ -12,6 +15,9 @@ const REGISTRY: Partial<Record<IntegrationProviderKind, ProviderClient>> = {
   gitlab: gitlabClient,
   slack: slackClient,
   microsoft_teams: teamsClient,
+  google_drive: driveClient,
+  dropbox: dropboxClient,
+  onedrive: onedriveClient,
 };
 
 /**
