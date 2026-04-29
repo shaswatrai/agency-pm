@@ -130,6 +130,14 @@ interface Store {
   updateInvoiceStatus: (id: string, status: InvoiceStatus) => void;
   // automation ops
   toggleAutomation: (id: string) => void;
+  addAutomation: (
+    rule: Omit<
+      AutomationRule,
+      "id" | "organizationId" | "runCount" | "lastRunAt" | "createdAt"
+    >,
+  ) => AutomationRule;
+  updateAutomation: (id: string, patch: Partial<AutomationRule>) => void;
+  removeAutomation: (id: string) => void;
   // quote ops
   updateQuoteStatus: (quoteId: string, status: QuoteStatus) => void;
   setCurrentQuoteVersion: (quoteId: string, versionId: string) => void;
@@ -750,6 +758,67 @@ export const useStore = create<Store>((set, get) => ({
         syncAutomationToggle(id, updated.isActive),
       );
     }
+  },
+
+  addAutomation: (rule) => {
+    const newRule: AutomationRule = {
+      ...rule,
+      id: uuidOrFallback("aut"),
+      organizationId: get().organization.id,
+      runCount: 0,
+      createdAt: new Date().toISOString(),
+    };
+    set((state) => ({ automations: [newRule, ...state.automations] }));
+    void import("@/lib/db/recordSync").then(({ syncAutomationUpsert }) =>
+      syncAutomationUpsert(newRule),
+    );
+    void import("@/lib/db/activitySync").then(({ logActivity }) =>
+      logActivity({
+        entityType: "project",
+        entityId: newRule.id,
+        action: "automation_created",
+        metadata: { name: newRule.name, category: newRule.category },
+      }),
+    );
+    return newRule;
+  },
+
+  updateAutomation: (id, patch) => {
+    set((state) => ({
+      automations: state.automations.map((a) =>
+        a.id === id ? { ...a, ...patch } : a,
+      ),
+    }));
+    const updated = get().automations.find((a) => a.id === id);
+    if (updated) {
+      void import("@/lib/db/recordSync").then(({ syncAutomationUpsert }) =>
+        syncAutomationUpsert(updated),
+      );
+    }
+    void import("@/lib/db/activitySync").then(({ logActivity }) =>
+      logActivity({
+        entityType: "project",
+        entityId: id,
+        action: "automation_updated",
+        metadata: { fields: Object.keys(patch) },
+      }),
+    );
+  },
+
+  removeAutomation: (id) => {
+    set((state) => ({
+      automations: state.automations.filter((a) => a.id !== id),
+    }));
+    void import("@/lib/db/recordSync").then(async ({ syncAutomationDelete }) => {
+      await syncAutomationDelete(id);
+    });
+    void import("@/lib/db/activitySync").then(({ logActivity }) =>
+      logActivity({
+        entityType: "project",
+        entityId: id,
+        action: "automation_removed",
+      }),
+    );
   },
 
   updateQuoteStatus: (quoteId, status) => {

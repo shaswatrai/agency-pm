@@ -400,6 +400,13 @@ export async function syncAutomationToggle(
   warn("Automation toggle", error);
 }
 
+export async function syncAutomationDelete(id: string): Promise<void> {
+  const supabase = getClient();
+  if (!supabase) return;
+  const { error } = await supabase.from("automations").delete().eq("id", id);
+  warn("Automation delete", error);
+}
+
 export async function syncAutomationUpsert(rule: AutomationRule): Promise<void> {
   const supabase = getClient();
   if (!supabase) return;

@@ -24,7 +24,9 @@ import { Switch } from "@/components/ui/switch";
 import { useStore } from "@/lib/db/store";
 import { cn } from "@/lib/utils";
 import { AutomationFlow } from "@/components/automations/AutomationFlow";
+import { AutomationBuilder } from "@/components/automations/AutomationBuilder";
 import { toast } from "sonner";
+import { Pencil, Trash2 } from "lucide-react";
 import type { AutomationRule } from "@/types/domain";
 
 const CATEGORY_META: Record<
@@ -51,9 +53,12 @@ export default function AutomationsPage() {
   const automations = useStore((s) => s.automations);
   const automationRuns = useStore((s) => s.automationRuns);
   const toggleAutomation = useStore((s) => s.toggleAutomation);
+  const removeAutomation = useStore((s) => s.removeAutomation);
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [builderOpen, setBuilderOpen] = useState(false);
+  const [editingRule, setEditingRule] = useState<AutomationRule | null>(null);
 
   const runsByRule = useMemo(() => {
     const map = new Map<string, typeof automationRuns>();
@@ -104,7 +109,12 @@ export default function AutomationsPage() {
             your work
           </p>
         </div>
-        <Button>
+        <Button
+          onClick={() => {
+            setEditingRule(null);
+            setBuilderOpen(true);
+          }}
+        >
           <Plus className="size-4" /> New rule
         </Button>
       </motion.div>
@@ -238,8 +248,38 @@ export default function AutomationsPage() {
                     <h3 className="text-base font-semibold tracking-tight">
                       {rule.name}
                     </h3>
-                    <div className="flex items-center gap-3">
-                      <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                        onClick={() => {
+                          setEditingRule(rule);
+                          setBuilderOpen(true);
+                        }}
+                        aria-label="Edit rule"
+                      >
+                        <Pencil className="size-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-status-blocked"
+                        onClick={() => {
+                          if (
+                            confirm(
+                              `Delete rule "${rule.name}"? Past runs stay in the log.`,
+                            )
+                          ) {
+                            removeAutomation(rule.id);
+                            toast.success("Rule deleted");
+                          }
+                        }}
+                        aria-label="Delete rule"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                      <span className="ml-2 text-[11px] uppercase tracking-wider text-muted-foreground">
                         {rule.isActive ? "Active" : "Paused"}
                       </span>
                       <Switch
@@ -412,6 +452,15 @@ export default function AutomationsPage() {
           </div>
         ) : null}
       </div>
+
+      <AutomationBuilder
+        open={builderOpen}
+        onOpenChange={(o) => {
+          setBuilderOpen(o);
+          if (!o) setEditingRule(null);
+        }}
+        editingRule={editingRule}
+      />
     </div>
   );
 }
