@@ -24,8 +24,10 @@ import { useStore } from "@/lib/db/store";
 import type {
   ActivityEvent,
   Comment,
+  DependencyType,
   ProjectFile,
   Task,
+  TaskDependency,
   TimeEntry,
 } from "@/types/domain";
 
@@ -325,6 +327,53 @@ export function startRealtime(supabase: SupabaseClient, orgId: string) {
               : state.tasks,
           };
         });
+      },
+    )
+    // Task dependencies INSERT / DELETE
+    .on(
+      "postgres_changes" as unknown as never,
+      { event: "INSERT", schema: "public", table: "task_dependencies" },
+      (payload: {
+        new: {
+          task_id: string;
+          depends_on_task_id: string;
+          type: string;
+        };
+      }) => {
+        const dep: TaskDependency = {
+          taskId: payload.new.task_id,
+          dependsOnTaskId: payload.new.depends_on_task_id,
+          type: payload.new.type as DependencyType,
+        };
+        useStore.setState((state) => {
+          if (
+            state.taskDependencies.some(
+              (d) =>
+                d.taskId === dep.taskId &&
+                d.dependsOnTaskId === dep.dependsOnTaskId,
+            )
+          )
+            return state;
+          return { taskDependencies: [...state.taskDependencies, dep] };
+        });
+      },
+    )
+    .on(
+      "postgres_changes" as unknown as never,
+      { event: "DELETE", schema: "public", table: "task_dependencies" },
+      (payload: {
+        old: { task_id: string; depends_on_task_id: string };
+      }) => {
+        const { task_id, depends_on_task_id } = payload.old;
+        useStore.setState((state) => ({
+          taskDependencies: state.taskDependencies.filter(
+            (d) =>
+              !(
+                d.taskId === task_id &&
+                d.dependsOnTaskId === depends_on_task_id
+              ),
+          ),
+        }));
       },
     )
     // Task assignee changes

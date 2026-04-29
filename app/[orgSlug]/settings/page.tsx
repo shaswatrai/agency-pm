@@ -18,10 +18,12 @@ import {
   Slack,
   Sparkles,
   Plug2,
+  Repeat,
 } from "lucide-react";
 import { ConnectionsPanel } from "@/components/settings/ConnectionsPanel";
 import { WorkspacePanel } from "@/components/settings/WorkspacePanel";
 import { TimeTrackingPanel } from "@/components/settings/TimeTrackingPanel";
+import { RecurringRulesPanel } from "@/components/settings/RecurringRulesPanel";
 import { useStore } from "@/lib/db/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,6 +62,13 @@ const SECTIONS: Section[] = [
     title: "Time tracking",
     description:
       "Rounding rules, idle threshold, locked weeks for billed periods",
+  },
+  {
+    key: "recurring",
+    icon: Repeat,
+    title: "Recurring tasks",
+    description:
+      "Auto-generate tasks on a daily / weekly / monthly schedule (retainers, QA passes)",
   },
   {
     key: "members",
@@ -193,6 +202,8 @@ export default function SettingsPage() {
                       {s.key === "workspace" && <WorkspacePanel />}
 
                       {s.key === "time" && <TimeTrackingPanel />}
+
+                      {s.key === "recurring" && <RecurringRulesPanel />}
 
                       {s.key === "members" && (
                         <div className="space-y-4">

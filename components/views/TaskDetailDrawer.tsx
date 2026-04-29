@@ -9,6 +9,7 @@ import {
   ExternalLink,
   GitBranch,
   Image as ImageIcon,
+  Link2,
   MessageSquare,
   Send,
   Tag,
@@ -37,6 +38,7 @@ import { UserAvatar } from "@/components/UserAvatar";
 import { AssigneePicker } from "@/components/views/AssigneePicker";
 import { DueDatePicker } from "@/components/views/DueDatePicker";
 import { SubtaskList } from "@/components/views/SubtaskList";
+import { DependencyPicker } from "@/components/views/DependencyPicker";
 import { useStore, useCurrentUser } from "@/lib/db/store";
 import { cn } from "@/lib/utils";
 import {
@@ -293,6 +295,13 @@ export function TaskDetailDrawer({
                       <CheckSquare className="size-3" /> Subtasks
                     </h3>
                     <SubtaskList taskId={task.id} />
+                  </section>
+
+                  <section>
+                    <h3 className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      <Link2 className="size-3" /> Dependencies
+                    </h3>
+                    <DependencyPicker taskId={task.id} />
                   </section>
 
                   {task.repoUrl ? (

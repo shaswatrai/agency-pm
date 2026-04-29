@@ -42,9 +42,14 @@ import type {
   QuoteVersion,
   QuoteVersionStatus,
   ProjectType,
+  RecurrenceFreq,
+  RecurringTaskRule,
+  RecurringTaskTemplate,
   RoundingRule,
   SkillProficiency,
   Task,
+  TaskDependency,
+  DependencyType,
   TimeEntry,
   TimeTrackingConfig,
   TimesheetStatus,
@@ -268,6 +273,66 @@ export async function hydrateFromSupabase(
     .from("user_skills")
     .select("*")
     .eq("organization_id", orgId);
+
+  // 16b. Recurring task rules
+  const { data: recurringRaw } = await supabase
+    .from("recurring_task_rules")
+    .select("*")
+    .eq("organization_id", orgId);
+  type DbRecurring = {
+    id: string;
+    organization_id: string;
+    project_id: string;
+    phase_id: string | null;
+    name: string;
+    is_active: boolean;
+    freq: RecurrenceFreq;
+    interval_count: number;
+    day_of_week: number | null;
+    day_of_month: number | null;
+    task_template: RecurringTaskTemplate;
+    start_date: string;
+    end_date: string | null;
+    last_run_at: string | null;
+    created_by: string | null;
+    created_at: string;
+  };
+  const recurringRules: RecurringTaskRule[] = (
+    (recurringRaw ?? []) as DbRecurring[]
+  ).map((r) => ({
+    id: r.id,
+    organizationId: r.organization_id,
+    projectId: r.project_id,
+    phaseId: r.phase_id ?? undefined,
+    name: r.name,
+    isActive: r.is_active,
+    freq: r.freq,
+    intervalCount: r.interval_count,
+    dayOfWeek: r.day_of_week ?? undefined,
+    dayOfMonth: r.day_of_month ?? undefined,
+    taskTemplate: r.task_template,
+    startDate: r.start_date,
+    endDate: r.end_date ?? undefined,
+    lastRunAt: r.last_run_at ?? undefined,
+    createdBy: r.created_by ?? undefined,
+    createdAt: r.created_at,
+  }));
+
+  // 16a. Task dependencies (joined to tasks for org scoping)
+  const dbTaskIds = ((tasksRaw ?? []) as DbTask[]).map((t) => t.id);
+  let depsRaw: { task_id: string; depends_on_task_id: string; type: string }[] = [];
+  if (dbTaskIds.length > 0) {
+    const { data } = await supabase
+      .from("task_dependencies")
+      .select("task_id, depends_on_task_id, type")
+      .in("task_id", dbTaskIds);
+    depsRaw = data ?? [];
+  }
+  const taskDependencies: TaskDependency[] = depsRaw.map((d) => ({
+    taskId: d.task_id,
+    dependsOnTaskId: d.depends_on_task_id,
+    type: d.type as DependencyType,
+  }));
 
   // 16. Time tracking config (one row per org; may be missing)
   const { data: ttcRaw } = await supabase
@@ -733,6 +798,8 @@ export async function hydrateFromSupabase(
     budgetChanges,
     userSkills,
     timeTrackingConfig,
+    taskDependencies,
+    recurringRules,
   }));
 
   return {
@@ -753,6 +820,8 @@ export async function hydrateFromSupabase(
       fxRates: fxRates.length,
       budgetChanges: budgetChanges.length,
       userSkills: userSkills.length,
+      taskDependencies: taskDependencies.length,
+      recurringRules: recurringRules.length,
     },
   };
 }

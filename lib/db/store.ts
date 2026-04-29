@@ -32,6 +32,7 @@ import type {
   BudgetChangeStatus,
   Client,
   Comment,
+  DependencyType,
   FxRate,
   Invoice,
   InvoiceStatus,
@@ -40,7 +41,9 @@ import type {
   ProjectFile,
   Quote,
   QuoteStatus,
+  RecurringTaskRule,
   Task,
+  TaskDependency,
   TimeEntry,
   TimeTrackingConfig,
   TimesheetStatus,
@@ -61,6 +64,8 @@ interface Store {
   comments: Comment[];
   timeEntries: TimeEntry[];
   files: ProjectFile[];
+  taskDependencies: TaskDependency[];
+  recurringRules: RecurringTaskRule[];
   invoices: Invoice[];
   automations: AutomationRule[];
   automationRuns: AutomationRun[];
@@ -91,6 +96,23 @@ interface Store {
   ) => Task;
   removeTask: (taskId: string) => void;
   duplicateTask: (taskId: string) => Task | null;
+  // dependency ops
+  addTaskDependency: (
+    taskId: string,
+    dependsOnTaskId: string,
+    type?: DependencyType,
+  ) => TaskDependency | null;
+  removeTaskDependency: (taskId: string, dependsOnTaskId: string) => void;
+  // recurring task rule ops
+  addRecurringRule: (
+    rule: Omit<
+      RecurringTaskRule,
+      "id" | "organizationId" | "createdAt" | "lastRunAt"
+    >,
+  ) => RecurringTaskRule;
+  toggleRecurringRule: (id: string) => void;
+  removeRecurringRule: (id: string) => void;
+  markRecurringRuleRun: (id: string, runAt: string) => void;
   // client ops
   addClient: (client: Omit<Client, "id" | "organizationId" | "code" | "createdAt">) => Client;
   updateClient: (clientId: string, patch: Partial<Client>) => void;
@@ -174,6 +196,8 @@ export const useStore = create<Store>((set, get) => ({
   comments: COMMENTS,
   timeEntries: TIME_ENTRIES,
   files: FILES,
+  taskDependencies: [],
+  recurringRules: [],
   invoices: INVOICES,
   automations: AUTOMATIONS,
   automationRuns: [],
@@ -385,6 +409,105 @@ export const useStore = create<Store>((set, get) => ({
       }),
     );
     return copy;
+  },
+
+  addTaskDependency: (taskId, dependsOnTaskId, type = "finish_to_start") => {
+    if (taskId === dependsOnTaskId) return null;
+    const state = get();
+    // Prevent dupes + simple direct-cycle (A→B and B→A)
+    const dupe = state.taskDependencies.some(
+      (d) => d.taskId === taskId && d.dependsOnTaskId === dependsOnTaskId,
+    );
+    if (dupe) return null;
+    const cycle = state.taskDependencies.some(
+      (d) => d.taskId === dependsOnTaskId && d.dependsOnTaskId === taskId,
+    );
+    if (cycle) return null;
+    const dep: TaskDependency = { taskId, dependsOnTaskId, type };
+    set((s) => ({ taskDependencies: [...s.taskDependencies, dep] }));
+    void import("@/lib/db/recordSync").then(({ syncTaskDependencyInsert }) =>
+      syncTaskDependencyInsert(dep),
+    );
+    void import("@/lib/db/activitySync").then(({ logActivity }) =>
+      logActivity({
+        entityType: "task",
+        entityId: taskId,
+        action: "dependency_added",
+        metadata: { dependsOnTaskId, type },
+      }),
+    );
+    return dep;
+  },
+
+  removeTaskDependency: (taskId, dependsOnTaskId) => {
+    set((s) => ({
+      taskDependencies: s.taskDependencies.filter(
+        (d) =>
+          !(d.taskId === taskId && d.dependsOnTaskId === dependsOnTaskId),
+      ),
+    }));
+    void import("@/lib/db/recordSync").then(({ syncTaskDependencyDelete }) =>
+      syncTaskDependencyDelete(taskId, dependsOnTaskId),
+    );
+    void import("@/lib/db/activitySync").then(({ logActivity }) =>
+      logActivity({
+        entityType: "task",
+        entityId: taskId,
+        action: "dependency_removed",
+        metadata: { dependsOnTaskId },
+      }),
+    );
+  },
+
+  addRecurringRule: (rule) => {
+    const newRule: RecurringTaskRule = {
+      ...rule,
+      id: uuidOrFallback("rtr"),
+      organizationId: get().organization.id,
+      createdAt: new Date().toISOString(),
+    };
+    set((s) => ({ recurringRules: [...s.recurringRules, newRule] }));
+    void import("@/lib/db/recordSync").then(({ syncRecurringRuleUpsert }) =>
+      syncRecurringRuleUpsert(newRule),
+    );
+    return newRule;
+  },
+
+  toggleRecurringRule: (id) => {
+    set((s) => ({
+      recurringRules: s.recurringRules.map((r) =>
+        r.id === id ? { ...r, isActive: !r.isActive } : r,
+      ),
+    }));
+    const updated = get().recurringRules.find((r) => r.id === id);
+    if (updated) {
+      void import("@/lib/db/recordSync").then(({ syncRecurringRuleUpsert }) =>
+        syncRecurringRuleUpsert(updated),
+      );
+    }
+  },
+
+  removeRecurringRule: (id) => {
+    set((s) => ({
+      recurringRules: s.recurringRules.filter((r) => r.id !== id),
+    }));
+    void import("@/lib/db/recordSync").then(({ syncRecurringRuleDelete }) =>
+      syncRecurringRuleDelete(id),
+    );
+  },
+
+  markRecurringRuleRun: (id, runAt) => {
+    set((s) => ({
+      recurringRules: s.recurringRules.map((r) =>
+        r.id === id ? { ...r, lastRunAt: runAt } : r,
+      ),
+    }));
+    const updated = get().recurringRules.find((r) => r.id === id);
+    if (updated) {
+      void import("@/lib/db/recordSync").then(({ syncRecurringRuleUpsert }) =>
+        syncRecurringRuleUpsert(updated),
+      );
+    }
   },
 
   addClient: (client) => {

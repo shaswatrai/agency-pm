@@ -32,6 +32,7 @@ export function GanttChart({
   const allTasks = useStore((s) => s.tasks);
   const allPhases = useStore((s) => s.phases);
   const allProjects = useStore((s) => s.projects);
+  const taskDependencies = useStore((s) => s.taskDependencies);
 
   const project = allProjects.find((p) => p.id === projectId);
   const phases = useMemo(
@@ -92,6 +93,59 @@ export function GanttChart({
   }, [phases, tasks]);
 
   const taskRows = rows.filter((r) => r.type === "task");
+
+  // Pre-compute bar geometry per task so we can both render bars + connect
+  // them with dependency arrows. Keyed by task id.
+  const barById = useMemo(() => {
+    const map = new Map<
+      string,
+      { left: number; width: number; rowIndex: number }
+    >();
+    rows.forEach((row, i) => {
+      if (row.type !== "task") return;
+      const t = row.task;
+      if (!t.dueDate) return;
+      const due = parseISO(t.dueDate);
+      const estDays = Math.max(1, Math.ceil((t.estimatedHours ?? 8) / 8));
+      const start = addDays(due, -estDays + 1);
+      const left = differenceInCalendarDays(start, rangeStart) * zoom;
+      const width = estDays * zoom - 4;
+      map.set(t.id, { left: Math.max(2, left), width, rowIndex: i });
+    });
+    return map;
+  }, [rows, rangeStart, zoom]);
+
+  // Build arrow paths from predecessor → successor for tasks in this project
+  const arrows = useMemo(() => {
+    const taskIds = new Set(rows.filter((r) => r.type === "task").map((r) =>
+      r.type === "task" ? r.task.id : "",
+    ));
+    return taskDependencies
+      .filter(
+        (d) =>
+          taskIds.has(d.taskId) &&
+          taskIds.has(d.dependsOnTaskId) &&
+          barById.has(d.taskId) &&
+          barById.has(d.dependsOnTaskId),
+      )
+      .map((d) => {
+        const pred = barById.get(d.dependsOnTaskId)!;
+        const succ = barById.get(d.taskId)!;
+        // finish_to_start: right edge of pred → left edge of succ
+        const x1 = pred.left + pred.width;
+        const y1 =
+          HEADER_HEIGHT + pred.rowIndex * ROW_HEIGHT + ROW_HEIGHT / 2;
+        const x2 = succ.left;
+        const y2 =
+          HEADER_HEIGHT + succ.rowIndex * ROW_HEIGHT + ROW_HEIGHT / 2;
+        // Routing: short horizontal stub, drop / rise, horizontal to target
+        const stub = Math.min(14, Math.max(4, Math.abs(x2 - x1) / 4));
+        const path = `M ${x1} ${y1} L ${x1 + stub} ${y1} L ${
+          x1 + stub
+        } ${y2} L ${x2 - 4} ${y2}`;
+        return { id: `${d.dependsOnTaskId}->${d.taskId}`, path, x2, y2 };
+      });
+  }, [taskDependencies, barById, rows]);
 
   // Build month/day header tiers
   const days = useMemo(
@@ -275,16 +329,8 @@ export function GanttChart({
                 );
               }
               const t = row.task;
-              const due = t.dueDate ? parseISO(t.dueDate) : null;
-              if (!due) return null;
-              const estDays = Math.max(
-                1,
-                Math.ceil((t.estimatedHours ?? 8) / 8),
-              );
-              const start = addDays(due, -estDays + 1);
-              const startOffset =
-                differenceInCalendarDays(start, rangeStart) * zoom;
-              const barWidth = estDays * zoom - 4;
+              const bar = barById.get(t.id);
+              if (!bar) return null;
               const meta = STATUS_META[t.status as TaskStatus];
 
               return (
@@ -299,8 +345,8 @@ export function GanttChart({
                     animate={{ opacity: 1, scaleX: 1 }}
                     transition={{ duration: 0.24, delay: i * 0.015 }}
                     style={{
-                      left: Math.max(2, startOffset),
-                      width: Math.max(zoom - 4, barWidth),
+                      left: bar.left,
+                      width: Math.max(zoom - 4, bar.width),
                       top: 6,
                       height: ROW_HEIGHT - 12,
                       transformOrigin: "left center",
@@ -322,6 +368,48 @@ export function GanttChart({
                 </div>
               );
             })}
+
+            {/* Dependency arrows overlay */}
+            {arrows.length > 0 ? (
+              <svg
+                className="pointer-events-none absolute inset-0"
+                style={{
+                  width: totalWidth,
+                  height: rows.length * ROW_HEIGHT + HEADER_HEIGHT,
+                }}
+              >
+                <defs>
+                  <marker
+                    id="gantt-arrow"
+                    viewBox="0 0 10 10"
+                    refX="8"
+                    refY="5"
+                    markerWidth="7"
+                    markerHeight="7"
+                    orient="auto-start-reverse"
+                  >
+                    <path
+                      d="M 0 0 L 10 5 L 0 10 z"
+                      fill="hsl(var(--muted-foreground))"
+                    />
+                  </marker>
+                </defs>
+                {arrows.map((a) => (
+                  <motion.path
+                    key={a.id}
+                    d={a.path}
+                    fill="none"
+                    stroke="hsl(var(--muted-foreground))"
+                    strokeWidth={1.4}
+                    strokeOpacity={0.55}
+                    markerEnd="url(#gantt-arrow)"
+                    initial={{ pathLength: 0, opacity: 0 }}
+                    animate={{ pathLength: 1, opacity: 1 }}
+                    transition={{ duration: 0.4 }}
+                  />
+                ))}
+              </svg>
+            ) : null}
 
             {/* Spacer */}
             <div style={{ height: rows.length * ROW_HEIGHT + HEADER_HEIGHT }} />

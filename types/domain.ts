@@ -145,6 +145,63 @@ export interface Task {
   updatedAt: string;
 }
 
+// ----------------------------------------------------------------------------
+// Task dependencies (PRD §5.2.2)
+// ----------------------------------------------------------------------------
+export type DependencyType =
+  | "finish_to_start" // default — predecessor must finish before this can start
+  | "start_to_start"
+  | "finish_to_finish"
+  | "start_to_finish";
+
+export interface TaskDependency {
+  taskId: string;
+  dependsOnTaskId: string;
+  type: DependencyType;
+}
+
+// ----------------------------------------------------------------------------
+// Recurring task rules (PRD §5.2.5)
+// ----------------------------------------------------------------------------
+export type RecurrenceFreq = "daily" | "weekly" | "monthly";
+
+/** Subset of Task that we copy onto each materialised instance. */
+export interface RecurringTaskTemplate {
+  title: string;
+  description?: string;
+  priority: TaskPriority;
+  taskType?: string;
+  estimatedHours?: number;
+  storyPoints?: number;
+  assigneeIds: string[];
+  reviewerId?: string;
+  clientVisible: boolean;
+  tags: string[];
+  /** offset in days from materialisation date — default due is same day */
+  dueOffsetDays?: number;
+}
+
+export interface RecurringTaskRule {
+  id: string;
+  organizationId: string;
+  projectId: string;
+  phaseId?: string;
+  name: string;
+  isActive: boolean;
+  freq: RecurrenceFreq;
+  intervalCount: number;
+  /** 0=Sun … 6=Sat — only used when freq === "weekly" */
+  dayOfWeek?: number;
+  /** 1..28 — only used when freq === "monthly" */
+  dayOfMonth?: number;
+  taskTemplate: RecurringTaskTemplate;
+  startDate: string;
+  endDate?: string;
+  lastRunAt?: string;
+  createdBy?: string;
+  createdAt: string;
+}
+
 export interface TimeEntry {
   id: string;
   taskId: string;

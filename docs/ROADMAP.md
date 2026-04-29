@@ -128,8 +128,8 @@ Pass 2 is now end-to-end real: every mutation path that has a Postgres table wri
 ## Pass 5 — Phase 5 finish (advanced)
 
 - 🟡 Sprint module — board + burndown ✅, but no backlog UI, no real sprint planning, no story-points pipeline, no retrospective template
-- ⛔ Task dependencies (Finish-to-Start, Start-to-Start, etc.) — type exists, no UI to set, no Gantt arrows
-- ⛔ Recurring tasks (cron-style, monthly retainer auto-generation)
+- ✅ **Task dependencies** end-to-end (Pass 5 chunk 1): `TaskDependency` type + `taskDependencies` store slice with `addTaskDependency` / `removeTaskDependency` (rejects self-links, dupes, and direct cycles); dual-writes to existing `task_dependencies` table; hydration; realtime INSERT/DELETE; `<DependencyPicker />` in TaskDetailDrawer (search-and-add chips for predecessors, read-only "blocks" reverse list); SVG arrows on the Gantt routed predecessor-right → successor-left with rounded path + arrowhead marker.
+- ✅ **Recurring tasks** end-to-end (Pass 5 chunk 2): migration `0004_recurring_tasks.sql` for `recurring_task_rules` (org-scoped, role-gated writes); `RecurringTaskRule` type + slice + add/toggle/remove ops with dual-write; hydration; `lib/automation/recurring.ts` engine that walks active rules and materialises any due tasks (`{date}` substitution token in titles); auto-runs on `<AutomationEngineBoot />` mount; new Settings → Recurring tasks panel with create dialog (daily/weekly/monthly + interval + day-of-week / day-of-month + start date), list view with toggle + delete, and "Run now" button.
 - ⛔ SLA module (PRD §5.14): config UI, live timer, escalation chain, SLA dashboard, SLA report per client
 - 🟡 Custom report builder — button exists, opens nothing; needs drag-and-drop field picker + chart type + filter + saved/scheduled
 - ⛔ Custom dashboard widgets

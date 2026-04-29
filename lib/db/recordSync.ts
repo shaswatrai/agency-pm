@@ -27,8 +27,10 @@ import type {
   Quote,
   QuoteStatus,
   QuoteVersion,
+  RecurringTaskRule,
   SkillProficiency,
   Task,
+  TaskDependency,
   TimeEntry,
   TimeTrackingConfig,
   TimesheetStatus,
@@ -177,6 +179,34 @@ export async function syncPhasesInsert(
     })),
   );
   warn("Phases persist", error);
+}
+
+// ── Task dependencies ──────────────────────────────────────────────────
+export async function syncTaskDependencyInsert(
+  dep: TaskDependency,
+): Promise<void> {
+  const supabase = getClient();
+  if (!supabase) return;
+  const { error } = await supabase.from("task_dependencies").insert({
+    task_id: dep.taskId,
+    depends_on_task_id: dep.dependsOnTaskId,
+    type: dep.type,
+  });
+  warn("Task dependency persist", error);
+}
+
+export async function syncTaskDependencyDelete(
+  taskId: string,
+  dependsOnTaskId: string,
+): Promise<void> {
+  const supabase = getClient();
+  if (!supabase) return;
+  const { error } = await supabase
+    .from("task_dependencies")
+    .delete()
+    .eq("task_id", taskId)
+    .eq("depends_on_task_id", dependsOnTaskId);
+  warn("Task dependency delete", error);
 }
 
 // ── Comments ───────────────────────────────────────────────────────────
@@ -563,6 +593,42 @@ export async function syncBudgetChangeReview(
     })
     .eq("id", id);
   warn("Budget change review", error);
+}
+
+// ── Recurring task rules ───────────────────────────────────────────────
+export async function syncRecurringRuleUpsert(
+  rule: RecurringTaskRule,
+): Promise<void> {
+  const supabase = getClient();
+  if (!supabase) return;
+  const { error } = await supabase.from("recurring_task_rules").upsert({
+    id: rule.id,
+    organization_id: rule.organizationId,
+    project_id: rule.projectId,
+    phase_id: rule.phaseId ?? null,
+    name: rule.name,
+    is_active: rule.isActive,
+    freq: rule.freq,
+    interval_count: rule.intervalCount,
+    day_of_week: rule.dayOfWeek ?? null,
+    day_of_month: rule.dayOfMonth ?? null,
+    task_template: rule.taskTemplate,
+    start_date: rule.startDate,
+    end_date: rule.endDate ?? null,
+    last_run_at: rule.lastRunAt ?? null,
+    created_by: rule.createdBy ?? null,
+  });
+  warn("Recurring rule upsert", error);
+}
+
+export async function syncRecurringRuleDelete(id: string): Promise<void> {
+  const supabase = getClient();
+  if (!supabase) return;
+  const { error } = await supabase
+    .from("recurring_task_rules")
+    .delete()
+    .eq("id", id);
+  warn("Recurring rule delete", error);
 }
 
 // ── Tasks bulk insert (for quote→project conversion) ──────────────────
