@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { motion } from "framer-motion";
-import { format, parseISO } from "date-fns";
+import { useState, useMemo } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { format, parseISO, formatDistanceToNow } from "date-fns";
 import {
   Plus,
   Search,
@@ -13,6 +13,10 @@ import {
   UserPlus,
   Repeat,
   TrendingUp,
+  ChevronDown,
+  CheckCircle2,
+  XCircle,
+  CircleDashed,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,9 +49,21 @@ const CATEGORY_META: Record<
 
 export default function AutomationsPage() {
   const automations = useStore((s) => s.automations);
+  const automationRuns = useStore((s) => s.automationRuns);
   const toggleAutomation = useStore((s) => s.toggleAutomation);
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const runsByRule = useMemo(() => {
+    const map = new Map<string, typeof automationRuns>();
+    for (const run of automationRuns) {
+      const list = map.get(run.ruleId) ?? [];
+      list.push(run);
+      map.set(run.ruleId, list);
+    }
+    return map;
+  }, [automationRuns]);
 
   const filtered = automations.filter((a) => {
     const matchesQuery =
@@ -263,11 +279,127 @@ export default function AutomationsPage() {
                     {rule.lastRunAt ? (
                       <span>
                         Last fired{" "}
-                        {format(parseISO(rule.lastRunAt), "MMM d, h:mm a")}
+                        {formatDistanceToNow(parseISO(rule.lastRunAt), {
+                          addSuffix: true,
+                        })}
                       </span>
                     ) : null}
                     <span className="capitalize">{meta.label}</span>
+                    <button
+                      onClick={() =>
+                        setExpandedId(
+                          expandedId === rule.id ? null : rule.id,
+                        )
+                      }
+                      className="ml-auto inline-flex items-center gap-1 rounded-pill border bg-card px-2 py-0.5 text-[10px] hover:bg-accent"
+                    >
+                      Run history
+                      <ChevronDown
+                        className={cn(
+                          "size-3 transition-transform",
+                          expandedId === rule.id && "rotate-180",
+                        )}
+                      />
+                    </button>
                   </div>
+
+                  <AnimatePresence initial={false}>
+                    {expandedId === rule.id ? (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="mt-4 rounded-md border bg-muted/20 p-3">
+                          <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                            Recent runs
+                          </p>
+                          {(runsByRule.get(rule.id) ?? []).length === 0 ? (
+                            <p className="px-1 py-3 text-center text-xs text-muted-foreground">
+                              Hasn't fired yet in this session. Trigger an
+                              event in the app and watch it appear here live.
+                            </p>
+                          ) : (
+                            <ul className="space-y-2">
+                              {(runsByRule.get(rule.id) ?? [])
+                                .slice(0, 6)
+                                .map((run) => {
+                                  const StatusIcon =
+                                    run.status === "success"
+                                      ? CheckCircle2
+                                      : run.status === "error"
+                                        ? XCircle
+                                        : CircleDashed;
+                                  const statusCls =
+                                    run.status === "success"
+                                      ? "text-status-done"
+                                      : run.status === "error"
+                                        ? "text-status-blocked"
+                                        : "text-muted-foreground";
+                                  return (
+                                    <li
+                                      key={run.id}
+                                      className="rounded-md border bg-card px-3 py-2"
+                                    >
+                                      <div className="flex items-start gap-2">
+                                        <StatusIcon
+                                          className={cn(
+                                            "mt-0.5 size-3.5 shrink-0",
+                                            statusCls,
+                                          )}
+                                        />
+                                        <div className="min-w-0 flex-1">
+                                          <p className="truncate text-xs font-medium">
+                                            {run.triggerSummary}
+                                          </p>
+                                          <p className="mt-0.5 text-[10px] text-muted-foreground">
+                                            {format(
+                                              parseISO(run.createdAt),
+                                              "MMM d, h:mm:ss a",
+                                            )}
+                                          </p>
+                                          {run.actions.length > 0 ? (
+                                            <ul className="mt-1.5 space-y-0.5">
+                                              {run.actions.map((a, i) => (
+                                                <li
+                                                  key={i}
+                                                  className="flex items-start gap-1.5 text-[10px]"
+                                                >
+                                                  <span
+                                                    className={cn(
+                                                      "mt-0.5 size-1 shrink-0 rounded-full",
+                                                      a.outcome === "ok"
+                                                        ? "bg-status-done"
+                                                        : a.outcome === "error"
+                                                          ? "bg-status-blocked"
+                                                          : "bg-muted-foreground",
+                                                    )}
+                                                  />
+                                                  <span className="text-muted-foreground">
+                                                    <span className="font-medium text-foreground">
+                                                      {a.label}
+                                                    </span>
+                                                    {a.detail
+                                                      ? ` — ${a.detail}`
+                                                      : ""}
+                                                  </span>
+                                                </li>
+                                              ))}
+                                            </ul>
+                                          ) : null}
+                                        </div>
+                                      </div>
+                                    </li>
+                                  );
+                                })}
+                            </ul>
+                          )}
+                        </div>
+                      </motion.div>
+                    ) : null}
+                  </AnimatePresence>
                 </div>
               </div>
             </motion.div>

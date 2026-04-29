@@ -44,7 +44,7 @@ The app starts in **demo mode** (in-memory data, no auth). To switch to a real b
 
 The credentials live in `localStorage` only. Resend keys are forwarded per-request to a server route that never persists them.
 
-> Backend wiring is split across passes — the data layer doesn't actually consume these credentials yet (see Pass 2 in the roadmap). Today the panel + status badge are real; the swap-out is queued.
+> Backend wiring is split across passes — the data layer doesn't fully swap to Supabase yet (see Pass 2 in the roadmap). The runtime config, Resend `/api/email/send` route, automation engine, and Supabase client wrapper are all wired and ready. To run the backend locally see [`docs/LOCAL_BACKEND.md`](docs/LOCAL_BACKEND.md).
 
 ## Scripts
 

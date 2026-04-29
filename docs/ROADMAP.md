@@ -21,19 +21,23 @@ The user shouldn't need to set env vars to swap from demo mode to a real backend
 - ✅ Data adapter stub (`lib/db/adapter.ts`) — exposes `useBackendMode()` so future code can branch
 - ✅ This roadmap doc
 
-## Pass 2 — Real auth & persistence (the spine)
+## Pass 2 — Real auth & persistence (the spine) [scaffolding done]
 
 Goal: enable Connected mode to actually persist data. No new features; just flip the underlying source.
 
-- ⛔ Apply the existing `supabase/migrations/0001_init.sql` migration (UI-driven)
-- ⛔ Browser-side Supabase client wired to runtime config (replaces `NEXT_PUBLIC_*` env consumption)
+- ✅ Local Supabase config (`supabase/config.toml`) ready for `supabase start`
+- ✅ Browser-side Supabase client (`lib/supabase/client.ts`) reads from runtime config — no env vars
+- ✅ `/api/email/send` route (Resend send via per-request API key, never persisted server-side)
+- ✅ Adapter helpers (`useBackendMode`, `getSupabaseClient`, `sendEmail`) in `lib/db/adapter.ts`
+- ✅ Local-setup doc (`docs/LOCAL_BACKEND.md`) with `supabase start` workflow + day-to-day commands
+- ⛔ Apply the existing `supabase/migrations/0001_init.sql` migration end-to-end
 - ⛔ `/login` and `/signup` actually call `supabase.auth.signInWithPassword` / `signUp`
 - ⛔ Session middleware that reads cookies and gates `/[orgSlug]/*`
 - ⛔ Org switcher reads `organization_members` from Supabase
 - ⛔ `lib/db/store.ts` actions branch on `useBackendMode()` — when `"supabase"`, write through Postgres
 - ⛔ Realtime subscription on `tasks`, `comments`, `time_entries` replacing the current `BroadcastChannel`
 - ⛔ File uploads land in Supabase Storage with the per-project bucket pattern from the migration
-- ⛔ Resend wired to `/api/email/send` for: invite email, mention email, milestone-approved, invoice sent
+- ⛔ Real email sends fire on: invite, mention, milestone-approved, invoice sent
 - ⛔ Activity log auto-generated on every server action; dashboard + project Activity tab read it
 
 ## Pass 3 — Phase 2 finish (financial) [DONE]
@@ -68,14 +72,19 @@ Goal: enable Connected mode to actually persist data. No new features; just flip
 - ⛔ Custom dashboard widgets
 - ⛔ Release management (group sprints into releases, generate release notes from completed tasks)
 
-## Pass 6 — Real automation engine
+## Pass 6 — Real automation engine [DONE]
 
-- 🟡 Automation list page is a visual catalog; rules don't fire
-- ⛔ Trigger evaluator (status_change, task_created, budget_threshold, etc.)
-- ⛔ Condition evaluator (priority = urgent, type = Design, etc.)
-- ⛔ Action executor (send_email via Resend, change_status, assign_user, create_invoice, post_slack via webhook)
-- ⛔ Automation logs (which trigger fired, which actions ran, success/error)
-- ⛔ Visual rule builder (drag triggers → conditions → actions)
+- ✅ Trigger evaluator: subscribes to store diffs and emits events for `task_status_change` (with target-status filter), `task_created`, `comment_added`, `approval_received`, `milestone_complete`, `budget_threshold`. Same engine carries to Pass 2 — Supabase Realtime feeds the same evaluator.
+- 🟡 Condition evaluator: passes through (no rules in seed have conditions today)
+- ✅ Action executor with real outcomes:
+  · `send_notification` → success (in-app toast)
+  · `assign_user` → mutates `task.assigneeIds`
+  · `update_priority` → flips project health on budget overrun
+  · `create_invoice` → drafts a real invoice row tied to the approved task
+  · `send_email` / `post_slack` / `webhook` / `create_task` → recorded as no-op with reason; ready to call real APIs in Pass 2 / Pass 7
+- ✅ Automation runs log: `automationRuns` slice (capped at 200), each with `triggerSummary`, action results (ok/noop/error + detail), timestamp; rule cards show last-fired-relative-time + a `Run history` accordion
+- ✅ Engine boot: `<AutomationEngineBoot />` mounts in the org layout and starts the subscription
+- ⛔ Visual drag-and-drop rule builder (current rule cards are read-only; the builder UI is queued for a follow-up)
 
 ## Pass 7 — Phase 4 (integrations) — pick the highest-value 2
 

@@ -268,6 +268,31 @@ export interface AutomationRule {
 }
 
 // ----------------------------------------------------------------------------
+// Automation runs — log every time a rule fires
+// ----------------------------------------------------------------------------
+export type AutomationRunStatus = "success" | "skipped" | "error";
+
+export interface AutomationRunActionResult {
+  type: AutomationActionType;
+  label: string;
+  outcome: "ok" | "noop" | "error";
+  detail?: string;
+}
+
+export interface AutomationRun {
+  id: string;
+  ruleId: string;
+  triggerType: AutomationTriggerType;
+  triggerSummary: string;
+  /** entity referenced by the trigger event (taskId, projectId, ...) */
+  entityType?: string;
+  entityId?: string;
+  status: AutomationRunStatus;
+  actions: AutomationRunActionResult[];
+  createdAt: string;
+}
+
+// ----------------------------------------------------------------------------
 // Quotes / estimates (PRD §5.6.1)
 // ----------------------------------------------------------------------------
 export type QuoteStatus =

@@ -2,6 +2,7 @@ import { Sidebar } from "@/components/shell/Sidebar";
 import { Topbar } from "@/components/shell/Topbar";
 import { QuickCapture } from "@/components/shell/QuickCapture";
 import { ShortcutsHelp } from "@/components/shell/ShortcutsHelp";
+import { AutomationEngineBoot } from "@/components/AutomationEngineBoot";
 
 export default function OrgLayout({
   children,
@@ -17,6 +18,7 @@ export default function OrgLayout({
       </div>
       <QuickCapture />
       <ShortcutsHelp />
+      <AutomationEngineBoot />
     </div>
   );
 }

@@ -26,6 +26,7 @@ import {
 } from "@/lib/db/seed";
 import type {
   AutomationRule,
+  AutomationRun,
   BudgetChangeRequest,
   BudgetChangeStatus,
   Client,
@@ -61,6 +62,7 @@ interface Store {
   files: ProjectFile[];
   invoices: Invoice[];
   automations: AutomationRule[];
+  automationRuns: AutomationRun[];
   quotes: Quote[];
   timesheetSubmissions: TimesheetSubmission[];
   skills: string[];
@@ -158,6 +160,7 @@ export const useStore = create<Store>((set, get) => ({
   files: FILES,
   invoices: INVOICES,
   automations: AUTOMATIONS,
+  automationRuns: [],
   quotes: QUOTES,
   timesheetSubmissions: TIMESHEET_SUBMISSIONS,
   skills: SKILLS,
