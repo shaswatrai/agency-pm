@@ -178,6 +178,10 @@ export const useStore = create<Store>((set, get) => ({
           : t,
       ),
     }));
+    // Mirror to Supabase if Connected mode
+    void import("@/lib/db/taskSync").then(({ syncTaskUpdate }) =>
+      syncTaskUpdate(taskId, { status, position }),
+    );
   },
 
   updateTask: (taskId, patch) => {
@@ -188,22 +192,32 @@ export const useStore = create<Store>((set, get) => ({
           : t,
       ),
     }));
+    void import("@/lib/db/taskSync").then(({ syncTaskUpdate }) =>
+      syncTaskUpdate(taskId, patch),
+    );
   },
 
   addTask: (task) => {
     const project = get().projects.find((p) => p.id === task.projectId);
     const seq = get().tasks.filter((t) => t.projectId === task.projectId).length + 1;
+    const taskId =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : nextId("t");
     const newTask: Task = {
       ...task,
-      id: nextId("t"),
+      id: taskId,
       code: `${project?.code ?? "TASK"}-T${String(seq).padStart(3, "0")}`,
-      organizationId: ORG.id,
+      organizationId: get().organization.id,
       position: seq * 1000,
       subtasks: task.subtasks ?? [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
     set((state) => ({ tasks: [...state.tasks, newTask] }));
+    void import("@/lib/db/taskSync").then(({ syncTaskInsert }) =>
+      syncTaskInsert(newTask),
+    );
     return newTask;
   },
 
@@ -213,6 +227,9 @@ export const useStore = create<Store>((set, get) => ({
       comments: state.comments.filter((c) => c.taskId !== taskId),
       timeEntries: state.timeEntries.filter((e) => e.taskId !== taskId),
     }));
+    void import("@/lib/db/taskSync").then(({ syncTaskDelete }) =>
+      syncTaskDelete(taskId),
+    );
   },
 
   duplicateTask: (taskId) => {
@@ -221,9 +238,13 @@ export const useStore = create<Store>((set, get) => ({
     const project = get().projects.find((p) => p.id === original.projectId);
     const seq =
       get().tasks.filter((t) => t.projectId === original.projectId).length + 1;
+    const newId =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : nextId("t");
     const copy: Task = {
       ...original,
-      id: nextId("t"),
+      id: newId,
       code: `${project?.code ?? "TASK"}-T${String(seq).padStart(3, "0")}`,
       title: `${original.title} (copy)`,
       status: "todo",
@@ -241,6 +262,9 @@ export const useStore = create<Store>((set, get) => ({
       updatedAt: new Date().toISOString(),
     };
     set((state) => ({ tasks: [...state.tasks, copy] }));
+    void import("@/lib/db/taskSync").then(({ syncTaskInsert }) =>
+      syncTaskInsert(copy),
+    );
     return copy;
   },
 

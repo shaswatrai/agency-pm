@@ -4,23 +4,44 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Loader2, Mail } from "lucide-react";
+import { Loader2, Mail, Database } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { useRuntimeConfig } from "@/lib/config/runtime";
+import { signIn, getPrimaryOrg } from "@/lib/auth";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("avery@atelier.studio");
-  const [password, setPassword] = useState("••••••••••••");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const cfg = useRuntimeConfig();
+  const connected = cfg.useSupabase && cfg.supabaseUrl && cfg.supabaseAnonKey;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
-    await new Promise((r) => setTimeout(r, 600));
-    toast.success("Signed in to Atelier Studio");
+
+    if (connected) {
+      const result = await signIn(email, password);
+      if (!result.ok || !result.user) {
+        setSubmitting(false);
+        toast.error(result.message);
+        return;
+      }
+      const org = await getPrimaryOrg(result.user.id);
+      setSubmitting(false);
+      toast.success(`Welcome back${org ? ` to ${org.name}` : ""}`);
+      router.push(org ? `/${org.slug}/dashboard` : "/atelier/dashboard");
+      return;
+    }
+
+    // Demo mode
+    await new Promise((r) => setTimeout(r, 500));
+    setSubmitting(false);
+    toast.success("Signed in (demo mode)");
     router.push("/atelier/dashboard");
   };
 
@@ -30,6 +51,20 @@ export default function LoginPage() {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
     >
+      <div
+        className={
+          "mb-3 inline-flex items-center gap-1.5 rounded-pill border px-2 py-0.5 text-[10px] font-medium " +
+          (connected
+            ? "border-status-done/30 bg-status-done/5 text-status-done"
+            : "border-status-revisions/30 bg-status-revisions/5 text-status-revisions")
+        }
+      >
+        <Database className="size-3" />
+        {connected
+          ? "Auth via your Supabase project"
+          : "Demo mode — Settings → Connections to wire Supabase"}
+      </div>
+
       <h1 className="text-2xl font-semibold tracking-tight">Welcome back</h1>
       <p className="mt-1 text-sm text-muted-foreground">
         Sign in to continue to your workspace.

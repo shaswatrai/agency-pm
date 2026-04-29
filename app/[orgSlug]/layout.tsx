@@ -3,6 +3,7 @@ import { Topbar } from "@/components/shell/Topbar";
 import { QuickCapture } from "@/components/shell/QuickCapture";
 import { ShortcutsHelp } from "@/components/shell/ShortcutsHelp";
 import { AutomationEngineBoot } from "@/components/AutomationEngineBoot";
+import { SupabaseHydration } from "@/components/SupabaseHydration";
 
 export default function OrgLayout({
   children,
@@ -19,6 +20,7 @@ export default function OrgLayout({
       <QuickCapture />
       <ShortcutsHelp />
       <AutomationEngineBoot />
+      <SupabaseHydration />
     </div>
   );
 }

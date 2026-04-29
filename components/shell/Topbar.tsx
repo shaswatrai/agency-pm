@@ -154,8 +154,15 @@ export function Topbar() {
             <Link href={`/atelier/settings`}>Workspace settings</Link>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem asChild>
-            <Link href="/login">Sign out</Link>
+          <DropdownMenuItem
+            onClick={async (e) => {
+              e.preventDefault();
+              const { signOut } = await import("@/lib/auth");
+              await signOut();
+              window.location.assign("/login");
+            }}
+          >
+            Sign out
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

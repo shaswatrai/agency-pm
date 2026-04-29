@@ -21,24 +21,36 @@ The user shouldn't need to set env vars to swap from demo mode to a real backend
 - ✅ Data adapter stub (`lib/db/adapter.ts`) — exposes `useBackendMode()` so future code can branch
 - ✅ This roadmap doc
 
-## Pass 2 — Real auth & persistence (the spine) [scaffolding done]
+## Pass 2 — Real auth & persistence (the spine) [chunk 1 of 4 done]
 
-Goal: enable Connected mode to actually persist data. No new features; just flip the underlying source.
+Goal: enable Connected mode to actually persist data.
 
-- ✅ Local Supabase config (`supabase/config.toml`) ready for `supabase start`
+**Done in chunk 1 (auth + tasks slice + seeding + hydration):**
+
+- ✅ Local Supabase running via `supabase start` (Postgres + Auth + Storage + Realtime + Studio + Mailpit on `localhost:54321–54324`)
+- ✅ Migration `0001_init.sql` applied end-to-end — 14 tables with RLS verified live
 - ✅ Browser-side Supabase client (`lib/supabase/client.ts`) reads from runtime config — no env vars
-- ✅ `/api/email/send` route (Resend send via per-request API key, never persisted server-side)
-- ✅ Adapter helpers (`useBackendMode`, `getSupabaseClient`, `sendEmail`) in `lib/db/adapter.ts`
-- ✅ Local-setup doc (`docs/LOCAL_BACKEND.md`) with `supabase start` workflow + day-to-day commands
-- ⛔ Apply the existing `supabase/migrations/0001_init.sql` migration end-to-end
-- ⛔ `/login` and `/signup` actually call `supabase.auth.signInWithPassword` / `signUp`
-- ⛔ Session middleware that reads cookies and gates `/[orgSlug]/*`
-- ⛔ Org switcher reads `organization_members` from Supabase
-- ⛔ `lib/db/store.ts` actions branch on `useBackendMode()` — when `"supabase"`, write through Postgres
-- ⛔ Realtime subscription on `tasks`, `comments`, `time_entries` replacing the current `BroadcastChannel`
-- ⛔ File uploads land in Supabase Storage with the per-project bucket pattern from the migration
-- ⛔ Real email sends fire on: invite, mention, milestone-approved, invoice sent
-- ⛔ Activity log auto-generated on every server action; dashboard + project Activity tab read it
+- ✅ `/api/email/send` route (Resend send via per-request API key, never persisted)
+- ✅ Adapter helpers (`useBackendMode`, `getSupabaseClient`, `sendEmail`)
+- ✅ Local-setup doc (`docs/LOCAL_BACKEND.md`)
+- ✅ `/login` + `/signup` actually call `supabase.auth.*` when Connected mode is on (demo-mode redirect kept as fallback)
+- ✅ Connected-mode banner on both auth pages so it's obvious which backend is hit
+- ✅ `lib/auth/index.ts` — full signup flow: auth signup → profile → org → membership → demo seed
+- ✅ `lib/db/seedSupabase.ts` — seeds 5 clients + 5 projects + ~50 phases + 20 tasks + assignees into the new org
+- ✅ `lib/db/hydrateFromSupabase.ts` — pulls org + members + clients + projects + phases + tasks (with assignees) from Postgres
+- ✅ `<SupabaseHydration />` mounts in the org layout; runs once when Connected + signed-in
+- ✅ Real `signOut` wired to the topbar avatar dropdown
+- ✅ **Task mutations dual-write to Postgres** (addTask / updateTask / moveTask / removeTask / duplicateTask) — instant Zustand update + best-effort `lib/db/taskSync.ts` mirror. Task IDs are now real UUIDs.
+
+**Remaining chunks:**
+
+- ⛔ **Chunk 2 — other slices dual-write**: projects, clients, phases, comments, time entries follow the same pattern
+- ⛔ **Chunk 3 — Realtime**: `supabase.channel(...)` subscriptions on `tasks` + `comments` + `time_entries` replace the `BroadcastChannel` transport
+- ⛔ **Chunk 4 — Storage + emails + activity log + SSR session**:
+  - File uploads land in Supabase Storage with the per-project bucket pattern
+  - Real Resend sends fire on: invite, mention, milestone-approved, invoice sent
+  - Activity log auto-generated on every server action; dashboard + project Activity tab read it
+  - SSR cookie middleware gates `/[orgSlug]/*` (today the gating is client-side only)
 
 ## Pass 3 — Phase 2 finish (financial) [DONE]
 

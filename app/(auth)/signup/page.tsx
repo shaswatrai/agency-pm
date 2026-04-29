@@ -4,11 +4,13 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Loader2, Building2 } from "lucide-react";
+import { Loader2, Building2, Database } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { useRuntimeConfig } from "@/lib/config/runtime";
+import { signUp } from "@/lib/auth";
 
 function slugify(input: string) {
   return input
@@ -38,6 +40,9 @@ export default function SignupPage() {
     setStep(2);
   };
 
+  const cfg = useRuntimeConfig();
+  const connected = cfg.useSupabase && cfg.supabaseUrl && cfg.supabaseAnonKey;
+
   const handleStep2 = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!orgName.trim() || !orgSlug.trim()) {
@@ -45,8 +50,35 @@ export default function SignupPage() {
       return;
     }
     setSubmitting(true);
-    await new Promise((r) => setTimeout(r, 800));
-    toast.success(`Workspace created: ${orgName}`);
+
+    if (connected) {
+      // Real Supabase signup
+      const result = await signUp({
+        email,
+        password,
+        fullName: name,
+        orgName,
+        orgSlug,
+      });
+      setSubmitting(false);
+      if (!result.ok) {
+        toast.error(result.message);
+        return;
+      }
+      if (!result.session) {
+        toast.success(result.message);
+        // No session → email confirmation required. Stay on the page.
+        return;
+      }
+      toast.success(result.message);
+      router.push(`/${orgSlug}/dashboard`);
+      return;
+    }
+
+    // Demo mode
+    await new Promise((r) => setTimeout(r, 600));
+    setSubmitting(false);
+    toast.success(`Workspace created: ${orgName} (demo mode — not persisted)`);
     router.push("/atelier/dashboard");
   };
 
@@ -56,7 +88,7 @@ export default function SignupPage() {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
     >
-      <div className="mb-6 flex items-center gap-1.5">
+      <div className="mb-3 flex items-center gap-1.5">
         {[1, 2].map((s) => (
           <span
             key={s}
@@ -66,6 +98,19 @@ export default function SignupPage() {
             }
           />
         ))}
+      </div>
+      <div
+        className={
+          "mb-6 inline-flex items-center gap-1.5 rounded-pill border px-2 py-0.5 text-[10px] font-medium " +
+          (connected
+            ? "border-status-done/30 bg-status-done/5 text-status-done"
+            : "border-status-revisions/30 bg-status-revisions/5 text-status-revisions")
+        }
+      >
+        <Database className="size-3" />
+        {connected
+          ? "Signing up against your Supabase project"
+          : "Demo mode — configure Supabase in Settings → Connections to persist"}
       </div>
 
       {step === 1 ? (
