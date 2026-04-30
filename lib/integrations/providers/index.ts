@@ -8,6 +8,10 @@ import { teamsClient } from "./microsoft_teams/client";
 import { driveClient } from "./google_drive/client";
 import { dropboxClient } from "./dropbox/client";
 import { onedriveClient } from "./onedrive/client";
+import { gaClient } from "./google_analytics/client";
+import { gscClient } from "./google_search_console/client";
+import { adsClient } from "./google_ads/client";
+import { metaClient } from "./meta_ads/client";
 
 const REGISTRY: Partial<Record<IntegrationProviderKind, ProviderClient>> = {
   figma: figmaClient,
@@ -18,6 +22,10 @@ const REGISTRY: Partial<Record<IntegrationProviderKind, ProviderClient>> = {
   google_drive: driveClient,
   dropbox: dropboxClient,
   onedrive: onedriveClient,
+  google_analytics: gaClient,
+  google_search_console: gscClient,
+  google_ads: adsClient,
+  meta_ads: metaClient,
 };
 
 /**
