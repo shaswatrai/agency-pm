@@ -12,6 +12,10 @@ import { gaClient } from "./google_analytics/client";
 import { gscClient } from "./google_search_console/client";
 import { adsClient } from "./google_ads/client";
 import { metaClient } from "./meta_ads/client";
+import { hubspotClient } from "./hubspot/client";
+import { salesforceClient } from "./salesforce/client";
+import { gcalClient } from "./google_calendar/client";
+import { outlookCalClient } from "./outlook_calendar/client";
 
 const REGISTRY: Partial<Record<IntegrationProviderKind, ProviderClient>> = {
   figma: figmaClient,
@@ -26,6 +30,10 @@ const REGISTRY: Partial<Record<IntegrationProviderKind, ProviderClient>> = {
   google_search_console: gscClient,
   google_ads: adsClient,
   meta_ads: metaClient,
+  hubspot: hubspotClient,
+  salesforce: salesforceClient,
+  google_calendar: gcalClient,
+  outlook_calendar: outlookCalClient,
 };
 
 /**
