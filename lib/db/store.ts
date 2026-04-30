@@ -56,6 +56,12 @@ import type {
   ReleaseStatus,
   SprintRetro,
   RetroNote,
+  ApprovalSignature,
+  MeetingNote,
+  MeetingActionItem,
+  SupportTicket,
+  SupportTicketStatus,
+  SupportTicketResponse,
 } from "@/types/domain";
 import type { TaskStatus } from "@/lib/design/tokens";
 
@@ -88,6 +94,9 @@ interface Store {
   timeTrackingConfig: TimeTrackingConfig;
   sprintRetros: SprintRetro[];
   releases: Release[];
+  approvalSignatures: ApprovalSignature[];
+  meetingNotes: MeetingNote[];
+  supportTickets: SupportTicket[];
 
   // task ops
   moveTask: (taskId: string, status: TaskStatus, position: number) => void;
@@ -225,6 +234,42 @@ interface Store {
   addTasksToRelease: (releaseId: string, taskIds: string[]) => void;
   removeTaskFromRelease: (releaseId: string, taskId: string) => void;
   removeRelease: (id: string) => void;
+
+  // approval signatures
+  addApprovalSignature: (
+    sig: Omit<ApprovalSignature, "id" | "organizationId" | "signedAt"> & {
+      signedAt?: string;
+    },
+  ) => ApprovalSignature;
+
+  // meeting notes
+  addMeetingNote: (
+    note: Omit<MeetingNote, "id" | "organizationId" | "createdAt" | "actionItems"> & {
+      actionItems?: MeetingActionItem[];
+    },
+  ) => MeetingNote;
+  updateMeetingNote: (id: string, patch: Partial<MeetingNote>) => void;
+  removeMeetingNote: (id: string) => void;
+  addMeetingActionItem: (
+    noteId: string,
+    item: Omit<MeetingActionItem, "id">,
+  ) => MeetingActionItem | null;
+  convertMeetingActionToTask: (noteId: string, itemId: string) => string | null;
+
+  // support tickets
+  addSupportTicket: (
+    t: Omit<SupportTicket, "id" | "organizationId" | "createdAt" | "responses" | "status"> & {
+      status?: SupportTicketStatus;
+    },
+  ) => SupportTicket;
+  setTicketStatus: (id: string, status: SupportTicketStatus) => void;
+  addTicketResponse: (
+    ticketId: string,
+    body: string,
+    authorId?: string,
+    authorEmail?: string,
+  ) => SupportTicketResponse | null;
+  convertTicketToTask: (ticketId: string) => string | null;
 }
 
 let counter = 1000;
@@ -271,6 +316,9 @@ export const useStore = create<Store>((set, get) => ({
   timeTrackingConfig: TIME_TRACKING_CONFIG,
   sprintRetros: [],
   releases: [],
+  approvalSignatures: [],
+  meetingNotes: [],
+  supportTickets: [],
 
   moveTask: (taskId, status, position) => {
     const prev = get().tasks.find((t) => t.id === taskId);
@@ -1590,6 +1638,178 @@ export const useStore = create<Store>((set, get) => ({
 
   removeRelease: (id) => {
     set((s) => ({ releases: s.releases.filter((r) => r.id !== id) }));
+  },
+
+  // ----- approval signatures (PRD §5.5.2) -----
+  addApprovalSignature: (input) => {
+    const sig: ApprovalSignature = {
+      ...input,
+      id: uuidOrFallback("sig"),
+      organizationId: get().organization.id,
+      signedAt: input.signedAt ?? new Date().toISOString(),
+    };
+    set((s) => ({ approvalSignatures: [sig, ...s.approvalSignatures] }));
+    return sig;
+  },
+
+  // ----- meeting notes (PRD §5.9) -----
+  addMeetingNote: (input) => {
+    const note: MeetingNote = {
+      id: uuidOrFallback("mn"),
+      organizationId: get().organization.id,
+      createdAt: new Date().toISOString(),
+      actionItems: input.actionItems ?? [],
+      ...input,
+    };
+    set((s) => ({ meetingNotes: [note, ...s.meetingNotes] }));
+    return note;
+  },
+  updateMeetingNote: (id, patch) => {
+    set((s) => ({
+      meetingNotes: s.meetingNotes.map((n) =>
+        n.id === id ? { ...n, ...patch } : n,
+      ),
+    }));
+  },
+  removeMeetingNote: (id) => {
+    set((s) => ({
+      meetingNotes: s.meetingNotes.filter((n) => n.id !== id),
+    }));
+  },
+  addMeetingActionItem: (noteId, item) => {
+    const note = get().meetingNotes.find((n) => n.id === noteId);
+    if (!note) return null;
+    const newItem: MeetingActionItem = {
+      ...item,
+      id: uuidOrFallback("mai"),
+    };
+    set((s) => ({
+      meetingNotes: s.meetingNotes.map((n) =>
+        n.id === noteId
+          ? { ...n, actionItems: [...n.actionItems, newItem] }
+          : n,
+      ),
+    }));
+    return newItem;
+  },
+  convertMeetingActionToTask: (noteId, itemId) => {
+    const note = get().meetingNotes.find((n) => n.id === noteId);
+    const item = note?.actionItems.find((i) => i.id === itemId);
+    if (!note || !item) return null;
+    if (item.taskId) return item.taskId;
+    if (!note.projectId) return null;
+    const newTask = get().addTask({
+      projectId: note.projectId,
+      title: item.body,
+      status: "todo",
+      priority: "medium",
+      assigneeIds: item.assigneeId ? [item.assigneeId] : [],
+      dueDate: item.dueDate,
+      tags: ["meeting"],
+      clientVisible: false,
+      actualHours: 0,
+      commentCount: 0,
+      attachmentCount: 0,
+      subtaskCount: 0,
+      subtasksDone: 0,
+    });
+    set((s) => ({
+      meetingNotes: s.meetingNotes.map((n) =>
+        n.id === noteId
+          ? {
+              ...n,
+              actionItems: n.actionItems.map((i) =>
+                i.id === itemId ? { ...i, taskId: newTask.id } : i,
+              ),
+            }
+          : n,
+      ),
+    }));
+    return newTask.id;
+  },
+
+  // ----- support tickets (PRD §5.5.1) -----
+  addSupportTicket: (input) => {
+    const ticket: SupportTicket = {
+      id: uuidOrFallback("tic"),
+      organizationId: get().organization.id,
+      createdAt: new Date().toISOString(),
+      responses: [],
+      status: input.status ?? "new",
+      ...input,
+    };
+    set((s) => ({ supportTickets: [ticket, ...s.supportTickets] }));
+    return ticket;
+  },
+  setTicketStatus: (id, status) => {
+    set((s) => ({
+      supportTickets: s.supportTickets.map((t) =>
+        t.id === id
+          ? {
+              ...t,
+              status,
+              resolvedAt:
+                status === "resolved" || status === "closed"
+                  ? t.resolvedAt ?? new Date().toISOString()
+                  : t.resolvedAt,
+            }
+          : t,
+      ),
+    }));
+  },
+  addTicketResponse: (ticketId, body, authorId, authorEmail) => {
+    const ticket = get().supportTickets.find((t) => t.id === ticketId);
+    if (!ticket) return null;
+    const resp: SupportTicketResponse = {
+      id: uuidOrFallback("tres"),
+      authorId,
+      authorEmail,
+      body,
+      createdAt: new Date().toISOString(),
+    };
+    set((s) => ({
+      supportTickets: s.supportTickets.map((t) =>
+        t.id === ticketId
+          ? { ...t, responses: [...t.responses, resp] }
+          : t,
+      ),
+    }));
+    return resp;
+  },
+  convertTicketToTask: (ticketId) => {
+    const ticket = get().supportTickets.find((t) => t.id === ticketId);
+    if (!ticket) return null;
+    if (ticket.taskId) return ticket.taskId;
+    // Resolve a project: ticket's projectId, or fall back to first active project for the client
+    let projectId = ticket.projectId;
+    if (!projectId) {
+      const project = get().projects.find(
+        (p) => p.clientId === ticket.clientId && p.status === "active",
+      );
+      projectId = project?.id;
+    }
+    if (!projectId) return null;
+    const newTask = get().addTask({
+      projectId,
+      title: ticket.subject,
+      description: ticket.body,
+      status: "todo",
+      priority: ticket.priority,
+      assigneeIds: ticket.assigneeId ? [ticket.assigneeId] : [],
+      tags: ["support_ticket"],
+      clientVisible: true,
+      actualHours: 0,
+      commentCount: 0,
+      attachmentCount: 0,
+      subtaskCount: 0,
+      subtasksDone: 0,
+    });
+    set((s) => ({
+      supportTickets: s.supportTickets.map((t) =>
+        t.id === ticketId ? { ...t, taskId: newTask.id, status: "in_progress" } : t,
+      ),
+    }));
+    return newTask.id;
   },
 }));
 

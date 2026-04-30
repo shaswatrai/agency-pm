@@ -21,6 +21,8 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { HealthPill } from "@/components/pills/HealthPill";
 import { StatusPill } from "@/components/pills/StatusPill";
+import { SignatureDialog } from "@/components/portal/SignatureDialog";
+import { SupportTicketsSection } from "@/components/portal/SupportTicketsSection";
 import { initials, formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -34,7 +36,7 @@ export default function ClientPortalPage() {
   const allInvoices = useStore((s) => s.invoices);
   const users = useStore((s) => s.users);
   const updateTask = useStore((s) => s.updateTask);
-  const [pending, setPending] = useState<string | null>(null);
+  // pending is no longer used — signatures handled via pendingSig below.
 
   const client = allClients.find((c) => c.id === params.clientId);
   const projects = allProjects.filter((p) => p.clientId === params.clientId);
@@ -55,24 +57,20 @@ export default function ClientPortalPage() {
   const recentFiles = project
     ? allFiles.filter((f) => f.projectId === project.id && f.clientVisible)
     : [];
-  const handleApprove = async (taskId: string, title: string) => {
-    setPending(taskId);
-    await new Promise((r) => setTimeout(r, 500));
-    updateTask(taskId, { status: "done" });
-    setPending(null);
-    toast.success(`${title} approved`, {
-      description: "The team has been notified.",
-    });
+  // Signatures (PRD §5.5.2): both approve and request-changes capture
+  // a typed-name signature before applying the underlying status change.
+  const [pendingSig, setPendingSig] = useState<{
+    taskId: string;
+    title: string;
+    action: "approved" | "revisions_requested";
+  } | null>(null);
+
+  const handleApprove = (taskId: string, title: string) => {
+    setPendingSig({ taskId, title, action: "approved" });
   };
 
-  const handleRequestChanges = async (taskId: string, title: string) => {
-    setPending(taskId);
-    await new Promise((r) => setTimeout(r, 500));
-    updateTask(taskId, { status: "revisions" });
-    setPending(null);
-    toast.message(`Changes requested on ${title}`, {
-      description: "We'll get back to you within 48 hours.",
-    });
+  const handleRequestChanges = (taskId: string, title: string) => {
+    setPendingSig({ taskId, title, action: "revisions_requested" });
   };
 
   const recentComments = project
@@ -305,22 +303,14 @@ export default function ClientPortalPage() {
                           size="sm"
                           className="flex-1"
                           onClick={() => handleApprove(t.id, t.title)}
-                          disabled={pending === t.id}
                         >
-                          {pending === t.id ? (
-                            <Loader2 className="size-4 animate-spin" />
-                          ) : (
-                            <>
-                              <CheckCircle2 className="size-4" /> Approve
-                            </>
-                          )}
+                          <CheckCircle2 className="size-4" /> Approve & sign
                         </Button>
                         <Button
                           size="sm"
                           variant="outline"
                           className="flex-1"
                           onClick={() => handleRequestChanges(t.id, t.title)}
-                          disabled={pending === t.id}
                         >
                           Request changes
                         </Button>
@@ -500,6 +490,10 @@ export default function ClientPortalPage() {
             )}
           </Card>
         </section>
+
+        <section>
+          <SupportTicketsSection clientId={client.id} />
+        </section>
       </div>
 
       <footer className="mt-16 flex items-center justify-between text-[11px] text-muted-foreground border-t pt-6">
@@ -509,6 +503,32 @@ export default function ClientPortalPage() {
           {format(new Date(), "MMM d, h:mm a")}
         </span>
       </footer>
+
+      {pendingSig && (
+        <SignatureDialog
+          open={true}
+          onOpenChange={(o) => !o && setPendingSig(null)}
+          action={pendingSig.action}
+          entityType="task"
+          entityId={pendingSig.taskId}
+          entityTitle={pendingSig.title}
+          onSigned={(sig) => {
+            updateTask(pendingSig.taskId, {
+              status: pendingSig.action === "approved" ? "done" : "revisions",
+            });
+            setPendingSig(null);
+            if (pendingSig.action === "approved") {
+              toast.success(`${pendingSig.title} approved`, {
+                description: `Signed by ${sig.signedName}.`,
+              });
+            } else {
+              toast.message(`Changes requested on ${pendingSig.title}`, {
+                description: `Signed by ${sig.signedName}.`,
+              });
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

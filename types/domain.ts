@@ -920,6 +920,89 @@ export type ReleaseStatus =
   | "released"
   | "rolled_back";
 
+// ----------------------------------------------------------------------------
+// Approval signatures (PRD §5.5.2)
+// ----------------------------------------------------------------------------
+export interface ApprovalSignature {
+  id: string;
+  organizationId: string;
+  /** Polymorphic — task | quote | invoice | release | milestone */
+  entityType: "task" | "quote" | "invoice" | "release" | "milestone";
+  entityId: string;
+  action: "approved" | "revisions_requested" | "rejected";
+  signedName: string;
+  signedRole?: string;
+  signedAt: string;
+  signatureMethod: "checkbox" | "typed_name" | "drawn";
+  /** Optional comment captured alongside the signature. */
+  comment?: string;
+  /** When known — anonymized IP, browser ID. */
+  ipAddress?: string;
+  userAgent?: string;
+}
+
+// ----------------------------------------------------------------------------
+// Meeting notes (PRD §5.9)
+// ----------------------------------------------------------------------------
+export interface MeetingActionItem {
+  id: string;
+  body: string;
+  assigneeId?: string;
+  dueDate?: string;
+  taskId?: string;
+}
+
+export interface MeetingNote {
+  id: string;
+  organizationId: string;
+  projectId?: string;
+  clientId?: string;
+  title: string;
+  /** ISO date-time the meeting occurred. */
+  meetingAt: string;
+  attendees: string[]; // user ids or arbitrary email strings
+  agenda?: string;
+  notes: string;
+  actionItems: MeetingActionItem[];
+  createdAt: string;
+  createdBy?: string;
+}
+
+// ----------------------------------------------------------------------------
+// Support tickets (PRD §5.5.1)
+// ----------------------------------------------------------------------------
+export type SupportTicketStatus =
+  | "new"
+  | "in_progress"
+  | "waiting_on_client"
+  | "resolved"
+  | "closed";
+
+export interface SupportTicketResponse {
+  id: string;
+  authorId?: string;
+  authorEmail?: string;
+  body: string;
+  createdAt: string;
+}
+
+export interface SupportTicket {
+  id: string;
+  organizationId: string;
+  clientId: string;
+  projectId?: string;
+  subject: string;
+  body: string;
+  status: SupportTicketStatus;
+  priority: "low" | "medium" | "high" | "urgent";
+  submittedByEmail?: string;
+  assigneeId?: string;
+  taskId?: string;
+  responses: SupportTicketResponse[];
+  createdAt: string;
+  resolvedAt?: string;
+}
+
 export interface Release {
   id: string;
   organizationId: string;

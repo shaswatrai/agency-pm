@@ -21,6 +21,7 @@ import { StatusPill } from "@/components/pills/StatusPill";
 import { BudgetBurnPanel } from "@/components/project/BudgetBurnPanel";
 import { RetrospectivePanel } from "@/components/sprint/RetrospectivePanel";
 import { ReleasesPanel } from "@/components/sprint/ReleasesPanel";
+import { MeetingNotesPanel } from "@/components/project/MeetingNotesPanel";
 import { cn, formatCurrency } from "@/lib/utils";
 
 export default function ProjectOverviewPage() {
@@ -441,6 +442,7 @@ export default function ProjectOverviewPage() {
       <div className="mt-8 grid gap-6">
         <RetrospectivePanel projectId={params.projectId} />
         <ReleasesPanel projectId={params.projectId} />
+        <MeetingNotesPanel projectId={params.projectId} />
       </div>
     </div>
   );
