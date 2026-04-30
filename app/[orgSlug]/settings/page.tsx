@@ -27,6 +27,7 @@ import { TimeTrackingPanel } from "@/components/settings/TimeTrackingPanel";
 import { RecurringRulesPanel } from "@/components/settings/RecurringRulesPanel";
 import { SlaPoliciesPanel } from "@/components/settings/SlaPoliciesPanel";
 import { IntegrationsPanel } from "@/components/integrations/IntegrationsPanel";
+import { SecurityPanel } from "@/components/security/SecurityPanel";
 import { useStore } from "@/lib/db/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -373,51 +374,7 @@ export default function SettingsPage() {
 
                       {s.key === "integrations" && <IntegrationsPanel />}
 
-                      {s.key === "security" && (
-                        <div className="space-y-2">
-                          {[
-                            {
-                              icon: KeyRound,
-                              title: "Two-factor authentication",
-                              description:
-                                "Require TOTP or hardware key for all members.",
-                              defaultOn: true,
-                            },
-                            {
-                              icon: Lock,
-                              title: "SSO via SAML / OIDC",
-                              description:
-                                "Connect Google Workspace, Microsoft Entra, or Okta.",
-                              defaultOn: false,
-                            },
-                            {
-                              icon: Globe,
-                              title: "IP allow-list",
-                              description:
-                                "Restrict workspace access to specific IP ranges.",
-                              defaultOn: false,
-                            },
-                          ].map((i) => (
-                            <div
-                              key={i.title}
-                              className="flex items-center gap-3 rounded-md border bg-card px-4 py-3"
-                            >
-                              <div className="grid size-9 place-items-center rounded-md bg-muted text-muted-foreground">
-                                <i.icon className="size-4" />
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <p className="text-sm font-medium">
-                                  {i.title}
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                  {i.description}
-                                </p>
-                              </div>
-                              <Switch defaultChecked={i.defaultOn} />
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                      {s.key === "security" && <SecurityPanel />}
                     </div>
                   </motion.div>
                 ) : null}

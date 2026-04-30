@@ -1003,6 +1003,41 @@ export interface SupportTicket {
   resolvedAt?: string;
 }
 
+// ----------------------------------------------------------------------------
+// Security settings (PRD §7)
+// ----------------------------------------------------------------------------
+export interface IpAllowlistEntry {
+  /** CIDR (192.168.1.0/24) or single IP. */
+  cidr: string;
+  label?: string;
+  addedAt: string;
+}
+
+export interface MfaEnrollment {
+  userId: string;
+  method: "totp";
+  /** otpauth:// URI shown once at enrollment. Cleared from the store
+   *  the next time the user logs in. */
+  setupUri?: string;
+  /** SHA-256 hex of the shared TOTP secret — never the secret itself. */
+  secretHash: string;
+  enrolledAt: string;
+  /** SHA-256 of each recovery code; comparison is constant-time on use. */
+  recoveryCodeHashes: string[];
+}
+
+export interface SecuritySettings {
+  organizationId: string;
+  /** Empty = no restriction. */
+  ipAllowlist: IpAllowlistEntry[];
+  /** Roles that MUST have MFA enabled before they can log in. */
+  mfaRequiredForRoles: OrgRole[];
+  /** Soft session timeout in minutes; null = no auto-logout. */
+  sessionTimeoutMinutes: number | null;
+  /** Days to retain audit data after a churned client; 0 = forever. */
+  churnDataRetentionDays: number;
+}
+
 export interface Release {
   id: string;
   organizationId: string;

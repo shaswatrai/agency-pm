@@ -62,6 +62,10 @@ import type {
   SupportTicket,
   SupportTicketStatus,
   SupportTicketResponse,
+  SecuritySettings,
+  IpAllowlistEntry,
+  MfaEnrollment,
+  OrgRole,
 } from "@/types/domain";
 import type { TaskStatus } from "@/lib/design/tokens";
 
@@ -97,6 +101,8 @@ interface Store {
   approvalSignatures: ApprovalSignature[];
   meetingNotes: MeetingNote[];
   supportTickets: SupportTicket[];
+  securitySettings: SecuritySettings;
+  mfaEnrollments: MfaEnrollment[];
 
   // task ops
   moveTask: (taskId: string, status: TaskStatus, position: number) => void;
@@ -270,6 +276,18 @@ interface Store {
     authorEmail?: string,
   ) => SupportTicketResponse | null;
   convertTicketToTask: (ticketId: string) => string | null;
+
+  // security settings (PRD §7)
+  updateSecuritySettings: (patch: Partial<SecuritySettings>) => void;
+  addIpAllowlistEntry: (entry: Omit<IpAllowlistEntry, "addedAt">) => void;
+  removeIpAllowlistEntry: (cidr: string) => void;
+  toggleMfaRequiredForRole: (role: OrgRole) => void;
+  /** Demo-mode TOTP enrollment. The browser computes the secret hash;
+   *  real mode hands this off to a server-side enrollment API. */
+  enrollMfa: (
+    enrollment: Omit<MfaEnrollment, "enrolledAt">,
+  ) => MfaEnrollment;
+  removeMfaEnrollment: (userId: string) => void;
 }
 
 let counter = 1000;
@@ -319,6 +337,14 @@ export const useStore = create<Store>((set, get) => ({
   approvalSignatures: [],
   meetingNotes: [],
   supportTickets: [],
+  securitySettings: {
+    organizationId: ORG.id,
+    ipAllowlist: [],
+    mfaRequiredForRoles: [],
+    sessionTimeoutMinutes: null,
+    churnDataRetentionDays: 0,
+  },
+  mfaEnrollments: [],
 
   moveTask: (taskId, status, position) => {
     const prev = get().tasks.find((t) => t.id === taskId);
@@ -1776,6 +1802,63 @@ export const useStore = create<Store>((set, get) => ({
     }));
     return resp;
   },
+  // ----- security (PRD §7) -----
+  updateSecuritySettings: (patch) => {
+    set((s) => ({
+      securitySettings: { ...s.securitySettings, ...patch },
+    }));
+  },
+  addIpAllowlistEntry: (entry) => {
+    set((s) => ({
+      securitySettings: {
+        ...s.securitySettings,
+        ipAllowlist: [
+          ...s.securitySettings.ipAllowlist.filter((e) => e.cidr !== entry.cidr),
+          { ...entry, addedAt: new Date().toISOString() },
+        ],
+      },
+    }));
+  },
+  removeIpAllowlistEntry: (cidr) => {
+    set((s) => ({
+      securitySettings: {
+        ...s.securitySettings,
+        ipAllowlist: s.securitySettings.ipAllowlist.filter((e) => e.cidr !== cidr),
+      },
+    }));
+  },
+  toggleMfaRequiredForRole: (role) => {
+    set((s) => {
+      const has = s.securitySettings.mfaRequiredForRoles.includes(role);
+      return {
+        securitySettings: {
+          ...s.securitySettings,
+          mfaRequiredForRoles: has
+            ? s.securitySettings.mfaRequiredForRoles.filter((r) => r !== role)
+            : [...s.securitySettings.mfaRequiredForRoles, role],
+        },
+      };
+    });
+  },
+  enrollMfa: (input) => {
+    const enrollment: MfaEnrollment = {
+      ...input,
+      enrolledAt: new Date().toISOString(),
+    };
+    set((s) => ({
+      mfaEnrollments: [
+        ...s.mfaEnrollments.filter((e) => e.userId !== input.userId),
+        enrollment,
+      ],
+    }));
+    return enrollment;
+  },
+  removeMfaEnrollment: (userId) => {
+    set((s) => ({
+      mfaEnrollments: s.mfaEnrollments.filter((e) => e.userId !== userId),
+    }));
+  },
+
   convertTicketToTask: (ticketId) => {
     const ticket = get().supportTickets.find((t) => t.id === ticketId);
     if (!ticket) return null;
