@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { TrendingDown, Zap, CheckSquare, Target } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { computeSprintMetrics } from "@/lib/sprint/metrics";
+import { SprintPlanningStrip } from "@/components/sprint/SprintPlanningStrip";
 
 interface SprintBoardProps {
   projectId: string;
@@ -85,6 +86,8 @@ export function SprintBoard({
             })()}
           </p>
         </motion.div>
+
+        <SprintPlanningStrip projectId={projectId} />
 
         <Card className="p-4">
           <div className="grid grid-cols-2 gap-3">

@@ -19,6 +19,8 @@ import { Card } from "@/components/ui/card";
 import { UserAvatar } from "@/components/UserAvatar";
 import { StatusPill } from "@/components/pills/StatusPill";
 import { BudgetBurnPanel } from "@/components/project/BudgetBurnPanel";
+import { RetrospectivePanel } from "@/components/sprint/RetrospectivePanel";
+import { ReleasesPanel } from "@/components/sprint/ReleasesPanel";
 import { cn, formatCurrency } from "@/lib/utils";
 
 export default function ProjectOverviewPage() {
@@ -433,6 +435,12 @@ export default function ProjectOverviewPage() {
             </div>
           </Card>
         </aside>
+      </div>
+
+      {/* Sprint cadence: retros + releases — agile-mode features (PRD §5.13) */}
+      <div className="mt-8 grid gap-6">
+        <RetrospectivePanel projectId={params.projectId} />
+        <ReleasesPanel projectId={params.projectId} />
       </div>
     </div>
   );

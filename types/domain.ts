@@ -887,6 +887,56 @@ export interface IntegrationJob {
   createdAt: string;
 }
 
+// ----------------------------------------------------------------------------
+// Sprint retros + releases (PRD §5.13)
+// ----------------------------------------------------------------------------
+export interface RetroNote {
+  id: string;
+  category: "went_well" | "didnt_go_well" | "action_item";
+  body: string;
+  authorId?: string;
+  /** When category=action_item and converted, the resulting taskId. */
+  taskId?: string;
+  createdAt: string;
+}
+
+export interface SprintRetro {
+  id: string;
+  organizationId: string;
+  projectId: string;
+  sprintLabel: string;
+  /** Inclusive window for the sprint this retro covers. */
+  startDate: string;
+  endDate: string;
+  notes: RetroNote[];
+  createdAt: string;
+  createdBy?: string;
+}
+
+export type ReleaseStatus =
+  | "planning"
+  | "in_progress"
+  | "code_freeze"
+  | "released"
+  | "rolled_back";
+
+export interface Release {
+  id: string;
+  organizationId: string;
+  projectId: string;
+  name: string;
+  /** Semver-ish or freeform — "v1.4", "Spring '26", "Q3 marketing push". */
+  version?: string;
+  status: ReleaseStatus;
+  targetDate?: string;
+  releasedAt?: string;
+  /** IDs of tasks in scope. Generated release notes are derived from this set. */
+  taskIds: string[];
+  notes?: string;
+  createdAt: string;
+  createdBy?: string;
+}
+
 /**
  * Canonical event names emitted by the central integrations event bus
  * and matched against `WebhookSubscription.eventFilter`. Outbound

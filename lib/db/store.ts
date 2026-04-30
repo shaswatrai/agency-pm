@@ -52,6 +52,10 @@ import type {
   TimesheetSubmission,
   User,
   UserSkill,
+  Release,
+  ReleaseStatus,
+  SprintRetro,
+  RetroNote,
 } from "@/types/domain";
 import type { TaskStatus } from "@/lib/design/tokens";
 
@@ -82,6 +86,8 @@ interface Store {
   fxRates: FxRate[];
   budgetChanges: BudgetChangeRequest[];
   timeTrackingConfig: TimeTrackingConfig;
+  sprintRetros: SprintRetro[];
+  releases: Release[];
 
   // task ops
   moveTask: (taskId: string, status: TaskStatus, position: number) => void;
@@ -195,6 +201,30 @@ interface Store {
   // time tracking config
   setTimeTrackingConfig: (patch: Partial<TimeTrackingConfig>) => void;
   toggleLockedWeek: (weekStart: string) => void;
+  // sprint retro ops
+  addSprintRetro: (
+    retro: Omit<SprintRetro, "id" | "organizationId" | "createdAt" | "notes"> & {
+      notes?: SprintRetro["notes"];
+    },
+  ) => SprintRetro;
+  addRetroNote: (
+    retroId: string,
+    note: Omit<RetroNote, "id" | "createdAt">,
+  ) => RetroNote | null;
+  removeRetroNote: (retroId: string, noteId: string) => void;
+  /** Convert an action_item RetroNote into a real Task and link it. */
+  convertRetroActionToTask: (retroId: string, noteId: string) => string | null;
+  // release ops
+  addRelease: (
+    release: Omit<Release, "id" | "organizationId" | "createdAt" | "taskIds"> & {
+      taskIds?: string[];
+    },
+  ) => Release;
+  updateRelease: (id: string, patch: Partial<Release>) => void;
+  setReleaseStatus: (id: string, status: ReleaseStatus) => void;
+  addTasksToRelease: (releaseId: string, taskIds: string[]) => void;
+  removeTaskFromRelease: (releaseId: string, taskId: string) => void;
+  removeRelease: (id: string) => void;
 }
 
 let counter = 1000;
@@ -239,6 +269,8 @@ export const useStore = create<Store>((set, get) => ({
   fxRates: FX_RATES,
   budgetChanges: BUDGET_CHANGES,
   timeTrackingConfig: TIME_TRACKING_CONFIG,
+  sprintRetros: [],
+  releases: [],
 
   moveTask: (taskId, status, position) => {
     const prev = get().tasks.find((t) => t.id === taskId);
@@ -1414,6 +1446,150 @@ export const useStore = create<Store>((set, get) => ({
     void import("@/lib/db/recordSync").then(({ syncTimeTrackingConfig }) =>
       syncTimeTrackingConfig(updated, orgId),
     );
+  },
+
+  // ----- sprint retro ops -----
+  addSprintRetro: (input) => {
+    const retro: SprintRetro = {
+      id: uuidOrFallback("retro"),
+      organizationId: get().organization.id,
+      projectId: input.projectId,
+      sprintLabel: input.sprintLabel,
+      startDate: input.startDate,
+      endDate: input.endDate,
+      notes: input.notes ?? [],
+      createdAt: new Date().toISOString(),
+      createdBy: input.createdBy,
+    };
+    set((s) => ({ sprintRetros: [retro, ...s.sprintRetros] }));
+    return retro;
+  },
+
+  addRetroNote: (retroId, note) => {
+    const retro = get().sprintRetros.find((r) => r.id === retroId);
+    if (!retro) return null;
+    const newNote: RetroNote = {
+      ...note,
+      id: uuidOrFallback("rnote"),
+      createdAt: new Date().toISOString(),
+    };
+    set((s) => ({
+      sprintRetros: s.sprintRetros.map((r) =>
+        r.id === retroId ? { ...r, notes: [...r.notes, newNote] } : r,
+      ),
+    }));
+    return newNote;
+  },
+
+  removeRetroNote: (retroId, noteId) => {
+    set((s) => ({
+      sprintRetros: s.sprintRetros.map((r) =>
+        r.id === retroId
+          ? { ...r, notes: r.notes.filter((n) => n.id !== noteId) }
+          : r,
+      ),
+    }));
+  },
+
+  convertRetroActionToTask: (retroId, noteId) => {
+    const retro = get().sprintRetros.find((r) => r.id === retroId);
+    const note = retro?.notes.find((n) => n.id === noteId);
+    if (!retro || !note || note.category !== "action_item") return null;
+    if (note.taskId) return note.taskId;
+    const newTask = get().addTask({
+      projectId: retro.projectId,
+      title: note.body,
+      status: "todo",
+      priority: "medium",
+      assigneeIds: note.authorId ? [note.authorId] : [],
+      tags: ["retrospective"],
+      clientVisible: false,
+      actualHours: 0,
+      commentCount: 0,
+      attachmentCount: 0,
+      subtaskCount: 0,
+      subtasksDone: 0,
+    });
+    set((s) => ({
+      sprintRetros: s.sprintRetros.map((r) =>
+        r.id === retroId
+          ? {
+              ...r,
+              notes: r.notes.map((n) =>
+                n.id === noteId ? { ...n, taskId: newTask.id } : n,
+              ),
+            }
+          : r,
+      ),
+    }));
+    return newTask.id;
+  },
+
+  // ----- release ops -----
+  addRelease: (input) => {
+    const release: Release = {
+      id: uuidOrFallback("rel"),
+      organizationId: get().organization.id,
+      projectId: input.projectId,
+      name: input.name,
+      version: input.version,
+      status: input.status,
+      targetDate: input.targetDate,
+      releasedAt: input.releasedAt,
+      taskIds: input.taskIds ?? [],
+      notes: input.notes,
+      createdAt: new Date().toISOString(),
+      createdBy: input.createdBy,
+    };
+    set((s) => ({ releases: [release, ...s.releases] }));
+    return release;
+  },
+
+  updateRelease: (id, patch) => {
+    set((s) => ({
+      releases: s.releases.map((r) => (r.id === id ? { ...r, ...patch } : r)),
+    }));
+  },
+
+  setReleaseStatus: (id, status) => {
+    set((s) => ({
+      releases: s.releases.map((r) =>
+        r.id === id
+          ? {
+              ...r,
+              status,
+              releasedAt:
+                status === "released" && !r.releasedAt
+                  ? new Date().toISOString()
+                  : r.releasedAt,
+            }
+          : r,
+      ),
+    }));
+  },
+
+  addTasksToRelease: (releaseId, taskIds) => {
+    set((s) => ({
+      releases: s.releases.map((r) =>
+        r.id === releaseId
+          ? { ...r, taskIds: Array.from(new Set([...r.taskIds, ...taskIds])) }
+          : r,
+      ),
+    }));
+  },
+
+  removeTaskFromRelease: (releaseId, taskId) => {
+    set((s) => ({
+      releases: s.releases.map((r) =>
+        r.id === releaseId
+          ? { ...r, taskIds: r.taskIds.filter((t) => t !== taskId) }
+          : r,
+      ),
+    }));
+  },
+
+  removeRelease: (id) => {
+    set((s) => ({ releases: s.releases.filter((r) => r.id !== id) }));
   },
 }));
 
