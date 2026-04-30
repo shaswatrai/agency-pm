@@ -109,6 +109,13 @@ export interface Project {
   code: string;
   name: string;
   type: ProjectType;
+  /** Granular sub-type from the bundled templates (PRD §5.1.2 / §5.11.1).
+   *  e.g. "wordpress_standard", "react_custom", "shopify_ecom",
+   *  "rn_mobile_app", "native_ios_android", "seo_retainer", "ppc",
+   *  "social_media", "brand_identity", "maintenance_retainer". */
+  subType?: string;
+  /** ID of the template (if any) the project was instantiated from. */
+  templateId?: string;
   startDate?: string;
   endDate?: string;
   status: ProjectStatus;

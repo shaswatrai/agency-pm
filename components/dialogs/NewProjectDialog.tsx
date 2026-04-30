@@ -17,6 +17,11 @@ import { useStore, useCurrentUser } from "@/lib/db/store";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
+  TEMPLATES_BY_PARENT,
+  getTemplate,
+  type ProjectTemplate,
+} from "@/lib/templates/projectTemplates";
+import {
   Globe,
   Smartphone,
   Megaphone,
@@ -154,26 +159,58 @@ export function NewProjectDialog({
     format(new Date("2026-04-29"), "yyyy-MM-dd"),
   );
   const [budget, setBudget] = useState<number>(TYPE_META.web_dev.budget);
+  const [templateId, setTemplateId] = useState<string | null>(null);
+
+  const template = templateId ? getTemplate(templateId) : null;
+  const availableTemplates = TEMPLATES_BY_PARENT[type] ?? [];
 
   const meta = TYPE_META[type];
+  const durationMonths = template
+    ? Math.max(1, Math.round(template.estimatedWeeks / 4))
+    : meta.duration;
   const endDate = format(
-    addMonths(new Date(startDate), meta.duration),
+    addMonths(new Date(startDate), durationMonths),
     "yyyy-MM-dd",
   );
 
   const handleTypeChange = (t: ProjectType) => {
     setType(t);
     setBudget(TYPE_META[t].budget);
+    // Clear template if it doesn't belong to the new parent type
+    if (template && template.parentType !== t) {
+      setTemplateId(null);
+    }
+  };
+
+  const handleTemplateChange = (tpl: ProjectTemplate | null) => {
+    setTemplateId(tpl?.id ?? null);
+    if (tpl) {
+      setBudget(tpl.defaultBudget);
+      if (tpl.parentType !== type) setType(tpl.parentType);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return toast.error("Name your project");
     if (!clientId) return toast.error("Pick a client");
+
+    const phaseSource = template
+      ? template.phases.map((p) => p.name)
+      : meta.phases;
+    const totalEstimatedHours = template
+      ? template.phases.reduce(
+          (s, p) => s + p.tasks.reduce((ss, t) => ss + t.estimatedHours, 0),
+          0,
+        )
+      : durationMonths * 160;
+
     const project = addProject({
       clientId,
       name: name.trim(),
       type,
+      subType: template?.subType,
+      templateId: template?.id,
       startDate,
       endDate,
       status: "active",
@@ -181,15 +218,17 @@ export function NewProjectDialog({
       projectManagerId: pmId,
       billingModel,
       totalBudget: budget,
-      estimatedHours: meta.duration * 160,
-      description: `${meta.label} engagement for ${
-        clients.find((c) => c.id === clientId)?.name
-      }.`,
+      estimatedHours: totalEstimatedHours,
+      description: template
+        ? template.description
+        : `${meta.label} engagement for ${
+            clients.find((c) => c.id === clientId)?.name
+          }.`,
       tags: [],
     });
 
-    // Auto-create phases from the template
-    const projectPhases: Phase[] = meta.phases.map((phaseName, i) => ({
+    // Auto-create phases (from template if picked, else from broad type)
+    const projectPhases: Phase[] = phaseSource.map((phaseName, i) => ({
       id: `${project.id}_phase_${i + 1}`,
       projectId: project.id,
       name: phaseName,
@@ -200,12 +239,45 @@ export function NewProjectDialog({
       phases: [...state.phases, ...projectPhases],
     }));
 
+    // If a template was picked, scaffold skeleton tasks per phase
+    let skeletonCount = 0;
+    if (template) {
+      const addTask = useStore.getState().addTask;
+      template.phases.forEach((tp, phaseIdx) => {
+        const phaseId = projectPhases[phaseIdx]?.id;
+        for (const t of tp.tasks) {
+          addTask({
+            projectId: project.id,
+            phaseId,
+            title: t.title,
+            status: "todo",
+            priority: t.priority ?? "medium",
+            assigneeIds: [],
+            estimatedHours: t.estimatedHours,
+            storyPoints: t.storyPoints,
+            taskType: t.taskType,
+            tags: [template.subType],
+            clientVisible: false,
+            actualHours: 0,
+            commentCount: 0,
+            attachmentCount: 0,
+            subtaskCount: 0,
+            subtasksDone: 0,
+          });
+          skeletonCount++;
+        }
+      });
+    }
+
     toast.success(`Created ${project.name}`, {
-      description: `${project.code} · ${meta.phases.length} phases auto-generated`,
+      description: template
+        ? `${project.code} · ${phaseSource.length} phases · ${skeletonCount} starter tasks`
+        : `${project.code} · ${phaseSource.length} phases auto-generated`,
     });
     onOpenChange(false);
     router.push(`/${orgSlug}/projects/${project.id}/overview`);
     setName("");
+    setTemplateId(null);
   };
 
   return (
@@ -258,6 +330,55 @@ export function NewProjectDialog({
               })}
             </div>
           </div>
+
+          {/* Template picker */}
+          {availableTemplates.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between">
+                <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                  Start from a template
+                </Label>
+                {template && (
+                  <button
+                    type="button"
+                    onClick={() => handleTemplateChange(null)}
+                    className="text-[11px] text-muted-foreground hover:text-foreground"
+                  >
+                    Clear · use plain {meta.label.toLowerCase()}
+                  </button>
+                )}
+              </div>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                {availableTemplates.map((tpl) => {
+                  const active = templateId === tpl.id;
+                  const taskTotal = tpl.phases.reduce((s, p) => s + p.tasks.length, 0);
+                  return (
+                    <button
+                      type="button"
+                      key={tpl.id}
+                      onClick={() => handleTemplateChange(active ? null : tpl)}
+                      className={cn(
+                        "rounded-md border p-3 text-left transition-all",
+                        active
+                          ? "border-primary/50 bg-primary/5 ring-1 ring-primary/30"
+                          : "hover:bg-accent",
+                      )}
+                    >
+                      <p className="text-sm font-medium">{tpl.displayName}</p>
+                      <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">
+                        {tpl.description}
+                      </p>
+                      <p className="mt-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+                        {tpl.phases.length} phases · {taskTotal} starter tasks ·{" "}
+                        {tpl.estimatedWeeks}w
+                        {tpl.isRecurring ? " · recurring" : ""}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Basics */}
           <div className="grid gap-4 sm:grid-cols-2">
@@ -368,21 +489,46 @@ export function NewProjectDialog({
           {/* Phase preview */}
           <div className="rounded-md border bg-muted/20 p-3">
             <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-              Auto-generated phases
+              {template
+                ? `${template.displayName} · phases + starter tasks`
+                : "Auto-generated phases"}
             </p>
             <div className="mt-2 flex flex-wrap gap-1">
-              {meta.phases.map((phase, i) => (
-                <span
-                  key={i}
-                  className="inline-flex items-center gap-1.5 rounded-pill border bg-background px-2 py-0.5 text-[11px]"
-                >
-                  <span className="grid size-3.5 place-items-center rounded-full bg-muted text-[8px] font-mono">
-                    {i + 1}
+              {(template ? template.phases.map((p) => p.name) : meta.phases).map(
+                (phase, i) => (
+                  <span
+                    key={i}
+                    className="inline-flex items-center gap-1.5 rounded-pill border bg-background px-2 py-0.5 text-[11px]"
+                    title={
+                      template
+                        ? `${template.phases[i]?.tasks.length ?? 0} starter tasks`
+                        : ""
+                    }
+                  >
+                    <span className="grid size-3.5 place-items-center rounded-full bg-muted text-[8px] font-mono">
+                      {i + 1}
+                    </span>
+                    {phase}
+                    {template && (
+                      <span className="text-[9px] text-muted-foreground">
+                        · {template.phases[i]?.tasks.length ?? 0}
+                      </span>
+                    )}
                   </span>
-                  {phase}
-                </span>
-              ))}
+                ),
+              )}
             </div>
+            {template && (
+              <p className="mt-2 text-[10px] text-muted-foreground">
+                {template.phases.reduce((s, p) => s + p.tasks.length, 0)} tasks
+                will be created in the To-do column · ~
+                {template.phases.reduce(
+                  (s, p) => s + p.tasks.reduce((ss, t) => ss + t.estimatedHours, 0),
+                  0,
+                )}
+                h estimated
+              </p>
+            )}
           </div>
 
           <div className="flex justify-end gap-2 border-t pt-4 -mx-6 -mb-6 px-6 py-4 bg-muted/20">
