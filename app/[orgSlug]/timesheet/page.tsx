@@ -30,6 +30,7 @@ import { useStore, useCurrentUser } from "@/lib/db/store";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { TimesheetStatus } from "@/types/domain";
+import { TimesheetApprovalQueue } from "@/components/timesheet/TimesheetApprovalQueue";
 
 const STATUS_META: Record<
   TimesheetStatus,
@@ -110,12 +111,6 @@ export default function TimesheetPage() {
   );
   const ownStatus: TimesheetStatus = ownSubmission?.status ?? "draft";
 
-  const isPM =
-    currentUser.role === "pm" ||
-    currentUser.role === "admin" ||
-    currentUser.role === "super_admin";
-  const pendingApprovals = submissions.filter((s) => s.status === "submitted");
-
   const handleSubmit = () => {
     if (weekTotal === 0) {
       toast.error("Log some time first before submitting");
@@ -146,21 +141,6 @@ export default function TimesheetPage() {
     toast.success(`Week submitted for approval`, {
       description: `${(weekTotal / 60).toFixed(1)}h to your PM`,
     });
-  };
-
-  const handleApprove = (id: string) => {
-    setStatus(id, "approved", { reviewerId: currentUser.id });
-    toast.success("Timesheet approved");
-  };
-
-  const handleReject = (id: string) => {
-    const reason = prompt("Reason for rejection?");
-    if (reason === null) return;
-    setStatus(id, "rejected", {
-      reviewerId: currentUser.id,
-      rejectionReason: reason || undefined,
-    });
-    toast.success("Timesheet rejected with feedback");
   };
 
   return (
@@ -387,91 +367,7 @@ export default function TimesheetPage() {
         </ul>
       </div>
 
-      {/* PM approval queue */}
-      {isPM ? (
-        <Card className="mt-6 overflow-hidden">
-          <div className="flex items-center justify-between border-b px-5 py-3">
-            <div>
-              <h3 className="flex items-center gap-2 text-sm font-semibold">
-                <Clock className="size-4 text-primary" /> Approval queue
-              </h3>
-              <p className="text-[11px] text-muted-foreground">
-                {pendingApprovals.length} timesheet
-                {pendingApprovals.length === 1 ? "" : "s"} waiting on you
-              </p>
-            </div>
-          </div>
-          {pendingApprovals.length === 0 ? (
-            <div className="grid place-items-center px-5 py-10 text-center">
-              <CheckCircle2 className="mb-2 size-7 text-status-done" />
-              <p className="text-sm font-medium">No pending approvals</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                All submitted timesheets are reviewed.
-              </p>
-            </div>
-          ) : (
-            <ul className="divide-y">
-              <AnimatePresence initial={false}>
-                {pendingApprovals.map((sub) => {
-                  const submitter = users.find((u) => u.id === sub.userId);
-                  return (
-                    <motion.li
-                      key={sub.id}
-                      layout
-                      initial={{ opacity: 0, y: 4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, x: 30, height: 0 }}
-                      className="flex items-center gap-4 px-5 py-3"
-                    >
-                      <UserAvatar
-                        user={{
-                          name: submitter?.fullName ?? "?",
-                          avatarUrl: submitter?.avatarUrl,
-                        }}
-                        size="sm"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium">
-                          {submitter?.fullName}
-                        </p>
-                        <p className="text-[11px] text-muted-foreground">
-                          Week of{" "}
-                          {format(parseISO(sub.weekStart), "MMM d")} ·{" "}
-                          {(sub.totalMinutes / 60).toFixed(1)}h logged ·{" "}
-                          {(sub.billableMinutes / 60).toFixed(1)}h billable
-                          {sub.submittedAt
-                            ? ` · submitted ${format(parseISO(sub.submittedAt), "MMM d, h:mm a")}`
-                            : ""}
-                        </p>
-                        {sub.notes ? (
-                          <p className="mt-1 truncate rounded-md bg-muted/30 px-2 py-1 text-[11px] italic text-muted-foreground">
-                            "{sub.notes}"
-                          </p>
-                        ) : null}
-                      </div>
-                      <div className="flex shrink-0 gap-1.5">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleReject(sub.id)}
-                        >
-                          <X className="size-3.5" /> Reject
-                        </Button>
-                        <Button
-                          size="sm"
-                          onClick={() => handleApprove(sub.id)}
-                        >
-                          <CheckCircle2 className="size-3.5" /> Approve
-                        </Button>
-                      </div>
-                    </motion.li>
-                  );
-                })}
-              </AnimatePresence>
-            </ul>
-          )}
-        </Card>
-      ) : null}
+      <TimesheetApprovalQueue />
     </div>
   );
 }
