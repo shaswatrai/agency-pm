@@ -1,0 +1,167 @@
+{
+  "$schema": "https://zapier.com/platform/schema/app",
+  "name": "Atelier",
+  "description": "Agency project management — tasks, projects, time tracking, invoicing, and approvals.",
+  "homepageUrl": "https://agency-pm-alpha.vercel.app",
+  "auth": {
+    "type": "custom",
+    "fields": [
+      {
+        "key": "api_token",
+        "type": "password",
+        "label": "API token",
+        "helpText": "Create one in Atelier → Settings → API tokens. Format: atl_xxxx_yyyyyyyy",
+        "required": true
+      },
+      {
+        "key": "base_url",
+        "type": "string",
+        "label": "Base URL",
+        "default": "https://agency-pm-alpha.vercel.app",
+        "helpText": "Override only if self-hosting Atelier."
+      }
+    ],
+    "test": {
+      "url": "{{bundle.authData.base_url}}/api/v1/clients?limit=1",
+      "headers": { "authorization": "Bearer {{bundle.authData.api_token}}" }
+    }
+  },
+  "triggers": {
+    "task_completed": {
+      "key": "task_completed",
+      "noun": "Task",
+      "display": {
+        "label": "Task completed",
+        "description": "Triggers when a task is moved to Done."
+      },
+      "operation": {
+        "type": "hook_to_poll",
+        "perform": {
+          "url": "{{bundle.targetUrl}}",
+          "method": "POST"
+        },
+        "performSubscribe": {
+          "url": "{{bundle.authData.base_url}}/api/v1/webhooks/subscriptions",
+          "method": "POST",
+          "headers": { "authorization": "Bearer {{bundle.authData.api_token}}" },
+          "body": {
+            "name": "Zapier — task_completed",
+            "target_url": "{{bundle.targetUrl}}",
+            "event_filter": ["task.completed"]
+          }
+        },
+        "performUnsubscribe": {
+          "url": "{{bundle.authData.base_url}}/api/v1/webhooks/subscriptions/{{bundle.subscribeData.id}}",
+          "method": "DELETE",
+          "headers": { "authorization": "Bearer {{bundle.authData.api_token}}" }
+        }
+      }
+    },
+    "invoice_paid": {
+      "key": "invoice_paid",
+      "noun": "Invoice",
+      "display": {
+        "label": "Invoice paid",
+        "description": "Triggers when an invoice is marked paid."
+      },
+      "operation": {
+        "type": "hook_to_poll",
+        "perform": { "url": "{{bundle.targetUrl}}", "method": "POST" },
+        "performSubscribe": {
+          "url": "{{bundle.authData.base_url}}/api/v1/webhooks/subscriptions",
+          "method": "POST",
+          "headers": { "authorization": "Bearer {{bundle.authData.api_token}}" },
+          "body": {
+            "name": "Zapier — invoice_paid",
+            "target_url": "{{bundle.targetUrl}}",
+            "event_filter": ["invoice.paid"]
+          }
+        },
+        "performUnsubscribe": {
+          "url": "{{bundle.authData.base_url}}/api/v1/webhooks/subscriptions/{{bundle.subscribeData.id}}",
+          "method": "DELETE",
+          "headers": { "authorization": "Bearer {{bundle.authData.api_token}}" }
+        }
+      }
+    },
+    "project_completed": {
+      "key": "project_completed",
+      "noun": "Project",
+      "display": {
+        "label": "Project completed",
+        "description": "Triggers when a project hits Completed status."
+      },
+      "operation": {
+        "type": "hook_to_poll",
+        "perform": { "url": "{{bundle.targetUrl}}", "method": "POST" },
+        "performSubscribe": {
+          "url": "{{bundle.authData.base_url}}/api/v1/webhooks/subscriptions",
+          "method": "POST",
+          "headers": { "authorization": "Bearer {{bundle.authData.api_token}}" },
+          "body": {
+            "name": "Zapier — project_completed",
+            "target_url": "{{bundle.targetUrl}}",
+            "event_filter": ["project.completed"]
+          }
+        },
+        "performUnsubscribe": {
+          "url": "{{bundle.authData.base_url}}/api/v1/webhooks/subscriptions/{{bundle.subscribeData.id}}",
+          "method": "DELETE",
+          "headers": { "authorization": "Bearer {{bundle.authData.api_token}}" }
+        }
+      }
+    }
+  },
+  "creates": {
+    "create_task": {
+      "key": "create_task",
+      "noun": "Task",
+      "display": { "label": "Create task", "description": "Add a new task to a project." },
+      "operation": {
+        "perform": {
+          "url": "{{bundle.authData.base_url}}/api/v1/tasks",
+          "method": "POST",
+          "headers": { "authorization": "Bearer {{bundle.authData.api_token}}" },
+          "body": {
+            "title": "{{bundle.inputData.title}}",
+            "projectId": "{{bundle.inputData.project_id}}",
+            "assigneeIds": ["{{bundle.inputData.assignee_id}}"],
+            "dueDate": "{{bundle.inputData.due_date}}"
+          }
+        },
+        "inputFields": [
+          { "key": "title", "label": "Task title", "required": true },
+          { "key": "project_id", "label": "Project ID", "required": true },
+          { "key": "assignee_id", "label": "Assignee user ID" },
+          { "key": "due_date", "label": "Due date", "type": "datetime" }
+        ]
+      }
+    },
+    "create_invoice": {
+      "key": "create_invoice",
+      "noun": "Invoice",
+      "display": { "label": "Create invoice", "description": "Generate an invoice for a client." },
+      "operation": {
+        "perform": {
+          "url": "{{bundle.authData.base_url}}/api/v1/invoices",
+          "method": "POST",
+          "headers": { "authorization": "Bearer {{bundle.authData.api_token}}" },
+          "body": {
+            "clientId": "{{bundle.inputData.client_id}}",
+            "projectId": "{{bundle.inputData.project_id}}",
+            "type": "{{bundle.inputData.type}}",
+            "currency": "{{bundle.inputData.currency}}",
+            "lineItems": "{{bundle.inputData.line_items}}"
+          }
+        },
+        "inputFields": [
+          { "key": "client_id", "label": "Client ID", "required": true },
+          { "key": "project_id", "label": "Project ID" },
+          { "key": "type", "label": "Type", "default": "milestone", "choices": ["milestone","time_and_materials","retainer","fixed_installment","expense"] },
+          { "key": "currency", "label": "Currency", "default": "USD" },
+          { "key": "line_items", "label": "Line items (JSON array)", "type": "text" }
+        ]
+      }
+    }
+  }
+}

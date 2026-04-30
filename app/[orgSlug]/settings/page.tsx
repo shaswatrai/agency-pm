@@ -26,6 +26,7 @@ import { WorkspacePanel } from "@/components/settings/WorkspacePanel";
 import { TimeTrackingPanel } from "@/components/settings/TimeTrackingPanel";
 import { RecurringRulesPanel } from "@/components/settings/RecurringRulesPanel";
 import { SlaPoliciesPanel } from "@/components/settings/SlaPoliciesPanel";
+import { IntegrationsPanel } from "@/components/integrations/IntegrationsPanel";
 import { useStore } from "@/lib/db/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -94,8 +95,9 @@ const SECTIONS: Section[] = [
   {
     key: "integrations",
     icon: Plug,
-    title: "Integrations",
-    description: "Figma, GitHub, Slack, accounting (Phase 4)",
+    title: "Integrations & webhooks",
+    description:
+      "Connect Figma, GitHub, Slack, Drive, accounting, marketing & CRM tools · outbound webhooks for any custom endpoint",
   },
   {
     key: "security",
@@ -369,65 +371,7 @@ export default function SettingsPage() {
                         </div>
                       )}
 
-                      {s.key === "integrations" && (
-                        <div className="space-y-2">
-                          {[
-                            {
-                              icon: Sparkles,
-                              name: "Figma",
-                              status: "Connected",
-                              connected: true,
-                            },
-                            {
-                              icon: GitBranch,
-                              name: "GitHub",
-                              status: "Connected",
-                              connected: true,
-                            },
-                            {
-                              icon: Slack,
-                              name: "Slack",
-                              status: "Not connected",
-                              connected: false,
-                            },
-                            {
-                              icon: Globe,
-                              name: "Google Drive",
-                              status: "Not connected",
-                              connected: false,
-                            },
-                          ].map((i) => (
-                            <div
-                              key={i.name}
-                              className="flex items-center gap-3 rounded-md border bg-card px-4 py-3"
-                            >
-                              <div className="grid size-9 place-items-center rounded-md bg-muted text-muted-foreground">
-                                <i.icon className="size-4" />
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <p className="text-sm font-medium">{i.name}</p>
-                                <p
-                                  className={cn(
-                                    "text-xs",
-                                    i.connected
-                                      ? "text-status-done"
-                                      : "text-muted-foreground",
-                                  )}
-                                >
-                                  {i.connected ? "● " : ""}
-                                  {i.status}
-                                </p>
-                              </div>
-                              <Button
-                                variant={i.connected ? "ghost" : "outline"}
-                                size="sm"
-                              >
-                                {i.connected ? "Manage" : "Connect"}
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                      {s.key === "integrations" && <IntegrationsPanel />}
 
                       {s.key === "security" && (
                         <div className="space-y-2">

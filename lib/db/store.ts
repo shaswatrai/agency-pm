@@ -265,6 +265,24 @@ export const useStore = create<Store>((set, get) => ({
         metadata: { status },
       }),
     );
+    // Outbound webhook fan-out (Pass 6)
+    if (prev && prev.status !== status) {
+      const orgId = get().organization.id;
+      void import("@/lib/integrations/events").then(({ emit }) => {
+        emit({
+          organizationId: orgId,
+          eventType: "task.status_changed",
+          payload: { taskId, from: prev.status, to: status },
+        });
+        if (status === "done") {
+          emit({
+            organizationId: orgId,
+            eventType: "task.completed",
+            payload: { taskId, projectId: prev.projectId },
+          });
+        }
+      });
+    }
     // Deliverable-approved email when a client-visible task flips to done
     if (status === "done" && prev && prev.status !== "done") {
       const updated = get().tasks.find((t) => t.id === taskId);
@@ -373,6 +391,22 @@ export const useStore = create<Store>((set, get) => ({
     if (newTask.assigneeIds.length > 0) {
       void import("@/lib/db/notify").then(({ notifyTaskAssignment }) =>
         notifyTaskAssignment(newTask, [], newTask.assigneeIds),
+      );
+    }
+    {
+      const orgId = get().organization.id;
+      void import("@/lib/integrations/events").then(({ emit }) =>
+        emit({
+          organizationId: orgId,
+          eventType: "task.created",
+          payload: {
+            taskId: newTask.id,
+            code: newTask.code,
+            title: newTask.title,
+            projectId: newTask.projectId,
+            assigneeIds: newTask.assigneeIds,
+          },
+        }),
       );
     }
     return newTask;
@@ -796,6 +830,24 @@ export const useStore = create<Store>((set, get) => ({
         metadata: { number: newInvoice.number, total: newInvoice.total },
       }),
     );
+    {
+      const orgId = get().organization.id;
+      void import("@/lib/integrations/events").then(({ emit }) =>
+        emit({
+          organizationId: orgId,
+          eventType: "invoice.created",
+          payload: {
+            invoiceId: newInvoice.id,
+            number: newInvoice.number,
+            total: newInvoice.total,
+            currency: newInvoice.currency,
+            clientId: newInvoice.clientId,
+            projectId: newInvoice.projectId,
+            type: newInvoice.type,
+          },
+        }),
+      );
+    }
     return newInvoice;
   },
 
@@ -843,6 +895,39 @@ export const useStore = create<Store>((set, get) => ({
         void import("@/lib/db/notify").then(({ notifyInvoiceSent }) =>
           notifyInvoiceSent(sent),
         );
+      }
+    }
+    if (prev && prev.status !== status) {
+      const sent = get().invoices.find((inv) => inv.id === id);
+      if (sent) {
+        const orgId = get().organization.id;
+        void import("@/lib/integrations/events").then(({ emit }) => {
+          if (status === "sent") {
+            emit({
+              organizationId: orgId,
+              eventType: "invoice.sent",
+              payload: {
+                invoiceId: id,
+                number: sent.number,
+                total: sent.total,
+                clientId: sent.clientId,
+              },
+            });
+          }
+          if (status === "paid") {
+            emit({
+              organizationId: orgId,
+              eventType: "invoice.paid",
+              payload: {
+                invoiceId: id,
+                number: sent.number,
+                total: sent.total,
+                clientId: sent.clientId,
+                paidAt: sent.paidAt,
+              },
+            });
+          }
+        });
       }
     }
   },
