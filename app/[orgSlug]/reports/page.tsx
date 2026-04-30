@@ -48,7 +48,8 @@ export default function ReportsPage() {
     [tasks, timeEntries, projects, invoices, clients],
   );
 
-  // Profitability per active project — values converted to base currency
+  // Profitability per active project — uses the resolved cost rate per
+  // user (PRD §5.3.1 hierarchy). Revenue converted to base currency.
   const profitability = useMemo(() => {
     return projects
       .filter((p) => p.status === "active")
@@ -56,10 +57,11 @@ export default function ReportsPage() {
         const projTasks = tasks.filter((t) => t.projectId === p.id);
         const taskIds = new Set(projTasks.map((t) => t.id));
         const entries = timeEntries.filter((e) => taskIds.has(e.taskId));
-        const cost = entries.reduce(
-          (s, e) => s + (e.durationMinutes / 60) * 110,
-          0,
-        );
+        const cost = entries.reduce((s, e) => {
+          const u = users.find((x) => x.id === e.userId);
+          const rate = u?.costRate ?? 95;
+          return s + (e.durationMinutes / 60) * rate;
+        }, 0);
         const client = clients.find((c) => c.id === p.clientId);
         const projectCurrency = client?.currency ?? "USD";
         const revenueLocal = (p.totalBudget ?? 0) * p.progress;
@@ -69,7 +71,7 @@ export default function ReportsPage() {
       })
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 6);
-  }, [projects, tasks, timeEntries, clients, convert]);
+  }, [projects, tasks, timeEntries, clients, convert, users]);
 
   // AR aging in base currency
   const arAging = useMemo(() => {

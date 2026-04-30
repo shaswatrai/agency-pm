@@ -26,6 +26,24 @@ export interface User {
   email: string;
   avatarUrl?: string;
   role: OrgRole;
+  /** Internal cost rate per hour (used for profitability). */
+  costRate?: number;
+  /** Default hourly bill rate per hour (sits at the bottom of the
+   *  resolution hierarchy: project override > client rate card >
+   *  this default; see lib/billing/rate.ts). */
+  billRate?: number;
+}
+
+/**
+ * Per-client per-role rate override. Lookup order in resolveBillingRate:
+ *   1. project.hourlyRateOverride
+ *   2. client.rateCard entry matching user role
+ *   3. user.billRate
+ *   4. fallback constant
+ */
+export interface RateCardEntry {
+  role: OrgRole;
+  rate: number;
 }
 
 export type ClientStatus = "prospect" | "active" | "on_hold" | "churned";
@@ -46,6 +64,9 @@ export interface Client {
   tags: string[];
   logoUrl?: string;
   portalEnabled: boolean;
+  /** Optional per-role rate overrides; sits between project override
+   *  and the team member's default rate in the billing-rate hierarchy. */
+  rateCard?: RateCardEntry[];
   createdAt: string;
 }
 
@@ -87,6 +108,8 @@ export interface Project {
   billingModel: BillingModel;
   totalBudget?: number;
   estimatedHours?: number;
+  /** Project-specific hourly bill rate that overrides client + user defaults. */
+  hourlyRateOverride?: number;
   description?: string;
   health: ProjectHealth;
   tags: string[];

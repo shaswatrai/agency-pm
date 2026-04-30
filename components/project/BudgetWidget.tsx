@@ -13,6 +13,8 @@ import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { RequestBudgetChangeDialog } from "@/components/dialogs/RequestBudgetChangeDialog";
+import { BudgetBurnPanel } from "@/components/project/BudgetBurnPanel";
+import { resolveBillingRateById } from "@/lib/billing/rate";
 
 interface BudgetWidgetProps {
   projectId: string;
@@ -23,6 +25,7 @@ export function BudgetWidget({ projectId }: BudgetWidgetProps) {
   const allTasks = useStore((s) => s.tasks);
   const allTimeEntries = useStore((s) => s.timeEntries);
   const allClients = useStore((s) => s.clients);
+  const allUsers = useStore((s) => s.users);
   const budgetChanges = useStore((s) => s.budgetChanges);
   const allInvoices = useStore((s) => s.invoices);
   const [bcrOpen, setBcrOpen] = useState(false);
@@ -45,9 +48,14 @@ export function BudgetWidget({ projectId }: BudgetWidgetProps) {
       0,
     );
     const totalCost = entries.reduce((s, e) => {
-      // Default $120/h until cost rates are wired into the user model
-      const rate = 120;
-      return s + (e.durationMinutes / 60) * rate;
+      const resolved = resolveBillingRateById({
+        userId: e.userId,
+        projectId,
+        users: allUsers,
+        projects: allProjects,
+        clients: allClients,
+      });
+      return s + (e.durationMinutes / 60) * resolved.rate;
     }, 0);
     const estimatedHours = tasks.reduce(
       (s, t) => s + (t.estimatedHours ?? 0),
@@ -83,7 +91,7 @@ export function BudgetWidget({ projectId }: BudgetWidgetProps) {
       deferred,
       currency: client?.currency ?? "USD",
     };
-  }, [project, projectId, allTasks, allTimeEntries, client, allInvoices]);
+  }, [project, projectId, allTasks, allTimeEntries, client, allInvoices, allUsers, allProjects, allClients]);
 
   if (!project || !stats) return null;
 
@@ -253,6 +261,8 @@ export function BudgetWidget({ projectId }: BudgetWidgetProps) {
         </div>
       </motion.div>
       </div>
+
+      <BudgetBurnPanel projectId={projectId} />
     </div>
   );
 }

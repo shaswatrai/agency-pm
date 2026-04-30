@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Mail, Phone, Globe, ArrowLeft } from "lucide-react";
 import { useStore } from "@/lib/db/store";
 import { ProjectHealthCard } from "@/components/dashboard/ProjectHealthCard";
+import { RateCardEditor } from "@/components/clients/RateCardEditor";
 import { Button } from "@/components/ui/button";
 import { initials, formatCurrency } from "@/lib/utils";
 
@@ -113,6 +114,10 @@ export default function ClientDetailPage() {
             </a>
           ) : null}
         </div>
+      </div>
+
+      <div className="mt-10">
+        <RateCardEditor clientId={client.id} />
       </div>
 
       <h2 className="mt-10 mb-4 text-lg font-semibold tracking-tight">
