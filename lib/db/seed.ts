@@ -35,6 +35,8 @@ export const USERS: User[] = [
     role: "super_admin",
     avatarUrl:
       "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=128&h=128&fit=crop",
+    billRate: 220,
+    costRate: 130,
   },
   {
     id: "u_marcus",
@@ -43,6 +45,8 @@ export const USERS: User[] = [
     role: "pm",
     avatarUrl:
       "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=128&h=128&fit=crop",
+    billRate: 185,
+    costRate: 110,
   },
   {
     id: "u_lina",
@@ -51,6 +55,8 @@ export const USERS: User[] = [
     role: "member",
     avatarUrl:
       "https://images.unsplash.com/photo-1580489944761-15a19d654956?w=128&h=128&fit=crop",
+    billRate: 155,
+    costRate: 90,
   },
   {
     id: "u_nikolai",
@@ -59,6 +65,8 @@ export const USERS: User[] = [
     role: "member",
     avatarUrl:
       "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=128&h=128&fit=crop",
+    billRate: 145,
+    costRate: 85,
   },
   {
     id: "u_sade",
@@ -67,6 +75,8 @@ export const USERS: User[] = [
     role: "member",
     avatarUrl:
       "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=128&h=128&fit=crop",
+    billRate: 145,
+    costRate: 85,
   },
   {
     id: "u_kai",
@@ -75,6 +85,8 @@ export const USERS: User[] = [
     role: "qa",
     avatarUrl:
       "https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=128&h=128&fit=crop",
+    billRate: 130,
+    costRate: 75,
   },
 ];
 
@@ -95,6 +107,11 @@ export const CLIENTS: Client[] = [
     accountManagerId: "u_marcus",
     tags: ["VIP", "Luxury"],
     portalEnabled: true,
+    rateCard: [
+      { role: "pm", rate: 210 },
+      { role: "member", rate: 175 },
+      { role: "qa", rate: 145 },
+    ],
     createdAt: "2026-01-12T10:00:00Z",
   },
   {

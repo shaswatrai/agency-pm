@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useStore } from "@/lib/db/store";
 import { analyzeBudgetBurn, type BurnSeverity } from "@/lib/billing/burn";
+import { resolveBillingRateById } from "@/lib/billing/rate";
 import { formatCurrency } from "@/lib/utils";
 
 interface Props {
@@ -54,6 +55,7 @@ export function BudgetBurnPanel({ projectId }: Props) {
   const tasks = useStore((s) => s.tasks);
   const timeEntries = useStore((s) => s.timeEntries);
   const clients = useStore((s) => s.clients);
+  const users = useStore((s) => s.users);
 
   const project = projects.find((p) => p.id === projectId);
   const projectTasks = useMemo(
@@ -69,8 +71,10 @@ export function BudgetBurnPanel({ projectId }: Props) {
       project,
       tasks: projectTasks,
       timeEntries,
+      rateFor: (userId) =>
+        resolveBillingRateById({ userId, projectId, users, projects, clients }).rate,
     });
-  }, [project, projectTasks, timeEntries]);
+  }, [project, projectTasks, timeEntries, projectId, users, projects, clients]);
 
   if (!project || !analysis || project.totalBudget === undefined) return null;
 
