@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useStore } from "@/lib/db/store";
 import { useBaseConverter, formatCurrencyAmount } from "@/lib/db/fx";
+import { resolveCostRateById } from "@/lib/billing/rate";
 import { BarChart } from "@/components/charts/BarChart";
 import { DonutChart } from "@/components/charts/DonutChart";
 import { LineChart } from "@/components/charts/LineChart";
@@ -48,8 +49,9 @@ export default function ReportsPage() {
     [tasks, timeEntries, projects, invoices, clients],
   );
 
-  // Profitability per active project — uses the resolved cost rate per
-  // user (PRD §5.3.1 hierarchy). Revenue converted to base currency.
+  // Profitability per active project — cost via the resolver hierarchy
+  // (project override → user default → fallback). Revenue converted to
+  // base currency.
   const profitability = useMemo(() => {
     return projects
       .filter((p) => p.status === "active")
@@ -58,9 +60,13 @@ export default function ReportsPage() {
         const taskIds = new Set(projTasks.map((t) => t.id));
         const entries = timeEntries.filter((e) => taskIds.has(e.taskId));
         const cost = entries.reduce((s, e) => {
-          const u = users.find((x) => x.id === e.userId);
-          const rate = u?.costRate ?? 95;
-          return s + (e.durationMinutes / 60) * rate;
+          const resolved = resolveCostRateById({
+            userId: e.userId,
+            projectId: p.id,
+            users,
+            projects,
+          });
+          return s + (e.durationMinutes / 60) * resolved.rate;
         }, 0);
         const client = clients.find((c) => c.id === p.clientId);
         const projectCurrency = client?.currency ?? "USD";

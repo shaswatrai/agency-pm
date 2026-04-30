@@ -110,6 +110,10 @@ export interface Project {
   estimatedHours?: number;
   /** Project-specific hourly bill rate that overrides client + user defaults. */
   hourlyRateOverride?: number;
+  /** Project-specific internal cost rate override. Mirrors the bill-rate
+   *  override but for profitability calcs (sometimes useful when a project
+   *  uses a contractor with a different cost basis than the team default). */
+  costRateOverride?: number;
   description?: string;
   health: ProjectHealth;
   tags: string[];

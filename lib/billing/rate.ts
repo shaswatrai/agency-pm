@@ -61,8 +61,62 @@ export function resolveBillingRate(input: ResolveBillingRateInputs): ResolvedRat
   return { rate: DEFAULT_BILL_RATE, source: "fallback", trail };
 }
 
-export function resolveCostRate(user: Pick<User, "costRate"> | null | undefined): number {
-  return user?.costRate ?? DEFAULT_COST_RATE;
+/**
+ * Cost-rate resolution mirrors the bill-rate hierarchy minus the
+ * client tier (rate cards apply only to billable side):
+ *
+ *   1. project.costRateOverride
+ *   2. user.costRate
+ *   3. DEFAULT_COST_RATE
+ */
+export interface ResolvedCostRate {
+  rate: number;
+  source: "project_override" | "user_default" | "fallback";
+  trail: string[];
+}
+
+export interface ResolveCostRateInputs {
+  user: Pick<User, "costRate"> | null | undefined;
+  project: Pick<Project, "costRateOverride"> | null | undefined;
+}
+
+export function resolveCostRate(input: ResolveCostRateInputs): ResolvedCostRate {
+  const trail: string[] = [];
+  if (
+    input.project?.costRateOverride !== undefined &&
+    input.project.costRateOverride !== null
+  ) {
+    trail.push(`project override = $${input.project.costRateOverride}/h`);
+    return {
+      rate: input.project.costRateOverride,
+      source: "project_override",
+      trail,
+    };
+  }
+  trail.push("no project override");
+  if (input.user?.costRate !== undefined && input.user.costRate !== null) {
+    trail.push(`user default = $${input.user.costRate}/h`);
+    return { rate: input.user.costRate, source: "user_default", trail };
+  }
+  trail.push("no user default");
+  trail.push(`fallback = $${DEFAULT_COST_RATE}/h`);
+  return { rate: DEFAULT_COST_RATE, source: "fallback", trail };
+}
+
+export function resolveCostRateById({
+  userId,
+  projectId,
+  users,
+  projects,
+}: {
+  userId: string;
+  projectId: string;
+  users: User[];
+  projects: Project[];
+}): ResolvedCostRate {
+  const user = users.find((u) => u.id === userId) ?? null;
+  const project = projects.find((p) => p.id === projectId) ?? null;
+  return resolveCostRate({ user, project });
 }
 
 /**
