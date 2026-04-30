@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { RequestBudgetChangeDialog } from "@/components/dialogs/RequestBudgetChangeDialog";
+import { BudgetBurnPanel } from "@/components/project/BudgetBurnPanel";
 
 interface BudgetWidgetProps {
   projectId: string;
@@ -253,6 +254,8 @@ export function BudgetWidget({ projectId }: BudgetWidgetProps) {
         </div>
       </motion.div>
       </div>
+
+      <BudgetBurnPanel projectId={projectId} />
     </div>
   );
 }
