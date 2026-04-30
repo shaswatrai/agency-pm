@@ -67,6 +67,15 @@ export interface Client {
   /** Optional per-role rate overrides; sits between project override
    *  and the team member's default rate in the billing-rate hierarchy. */
   rateCard?: RateCardEntry[];
+  /** Per-client portal branding (PRD §5.5.1). Falls back to org defaults. */
+  portalBranding?: {
+    /** HSL hue for primary accent (0..360). */
+    accentHue?: number;
+    /** Welcome banner shown above the portal dashboard. */
+    welcomeMessage?: string;
+    /** Override the agency's "Atelier Studio · {client.name} portal" footer. */
+    footerOverride?: string;
+  };
   createdAt: string;
 }
 
