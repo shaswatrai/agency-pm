@@ -386,6 +386,59 @@ export interface ProjectFile {
   createdAt: string;
   /** Storage path inside the `project-files` bucket; undefined for in-memory demo files. */
   storagePath?: string;
+  /** OCR / extracted text content for full-text search (PRD §5.7).
+   *  Real mode populates this asynchronously after upload via a
+   *  Tika / OpenAI vision pass. Demo mode synthesizes deterministic
+   *  text from the file name + mime type for testing. */
+  extractedText?: string;
+  /** Tracks whether the OCR pipeline ran. */
+  ocrStatus?: "pending" | "complete" | "failed" | "skipped";
+}
+
+// ----------------------------------------------------------------------------
+// Brand asset library (PRD §5.7)
+// ----------------------------------------------------------------------------
+export type BrandAssetKind =
+  | "logo"
+  | "color"
+  | "font"
+  | "guideline"
+  | "template"
+  | "imagery";
+
+export interface BrandAsset {
+  id: string;
+  organizationId: string;
+  clientId: string;
+  kind: BrandAssetKind;
+  name: string;
+  description?: string;
+  /** kind-specific payload:
+   *   logo:       { url, fileName, variant: "primary" | "mono" | "wordmark" }
+   *   color:      { hex, name, swatchType: "primary" | "secondary" | "accent" }
+   *   font:       { family, weights[], usage }
+   *   guideline:  { url, fileName }
+   *   template:   { url, fileName, format }
+   *   imagery:    { url, alt }
+   */
+  metadata: Record<string, unknown>;
+  /** Optional file reference (when the asset has a binary). */
+  fileId?: string;
+  uploadedBy?: string;
+  createdAt: string;
+}
+
+// ----------------------------------------------------------------------------
+// Storage quotas (PRD §5.7)
+// ----------------------------------------------------------------------------
+export interface StorageQuota {
+  organizationId: string;
+  /** Org-wide cap in bytes; 0 = unlimited. */
+  totalLimitBytes: number;
+  /** Per-project cap; 0 = inherits org-wide. */
+  perProjectLimitBytes: number;
+  /** % usage that triggers an alert (default 80). */
+  warningThresholdPct: number;
 }
 
 // ----------------------------------------------------------------------------

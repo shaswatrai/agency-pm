@@ -71,6 +71,9 @@ import type {
   EmailToTaskMapping,
   SsoProvider,
   SsoProtocol,
+  BrandAsset,
+  BrandAssetKind,
+  StorageQuota,
 } from "@/types/domain";
 import type { TaskStatus } from "@/lib/design/tokens";
 
@@ -112,6 +115,8 @@ interface Store {
   emailDigestPrefs: EmailDigestPreference[];
   emailToTaskMappings: EmailToTaskMapping[];
   ssoProviders: SsoProvider[];
+  brandAssets: BrandAsset[];
+  storageQuota: StorageQuota;
 
   // task ops
   moveTask: (taskId: string, status: TaskStatus, position: number) => void;
@@ -332,6 +337,16 @@ interface Store {
   ) => SsoProvider;
   updateSsoProvider: (id: string, patch: Partial<SsoProvider>) => void;
   removeSsoProvider: (id: string) => void;
+
+  // brand asset library (PRD §5.7)
+  addBrandAsset: (
+    asset: Omit<BrandAsset, "id" | "organizationId" | "createdAt">,
+  ) => BrandAsset;
+  updateBrandAsset: (id: string, patch: Partial<BrandAsset>) => void;
+  removeBrandAsset: (id: string) => void;
+
+  // storage quotas (PRD §5.7)
+  updateStorageQuota: (patch: Partial<StorageQuota>) => void;
 }
 
 let counter = 1000;
@@ -393,6 +408,13 @@ export const useStore = create<Store>((set, get) => ({
   emailDigestPrefs: [],
   emailToTaskMappings: [],
   ssoProviders: [],
+  brandAssets: [],
+  storageQuota: {
+    organizationId: ORG.id,
+    totalLimitBytes: 0,
+    perProjectLimitBytes: 0,
+    warningThresholdPct: 80,
+  },
 
   moveTask: (taskId, status, position) => {
     const prev = get().tasks.find((t) => t.id === taskId);
@@ -2031,6 +2053,33 @@ export const useStore = create<Store>((set, get) => ({
     set((s) => ({
       ssoProviders: s.ssoProviders.filter((p) => p.id !== id),
     }));
+  },
+
+  // ----- brand asset library (PRD §5.7) -----
+  addBrandAsset: (input) => {
+    const asset: BrandAsset = {
+      ...input,
+      id: uuidOrFallback("ba"),
+      organizationId: get().organization.id,
+      createdAt: new Date().toISOString(),
+    };
+    set((s) => ({ brandAssets: [asset, ...s.brandAssets] }));
+    return asset;
+  },
+  updateBrandAsset: (id, patch) => {
+    set((s) => ({
+      brandAssets: s.brandAssets.map((a) =>
+        a.id === id ? { ...a, ...patch } : a,
+      ),
+    }));
+  },
+  removeBrandAsset: (id) => {
+    set((s) => ({ brandAssets: s.brandAssets.filter((a) => a.id !== id) }));
+  },
+
+  // ----- storage quotas (PRD §5.7) -----
+  updateStorageQuota: (patch) => {
+    set((s) => ({ storageQuota: { ...s.storageQuota, ...patch } }));
   },
 
   convertTicketToTask: (ticketId) => {

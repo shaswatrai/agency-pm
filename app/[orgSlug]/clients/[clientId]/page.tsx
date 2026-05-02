@@ -7,6 +7,7 @@ import { useStore } from "@/lib/db/store";
 import { ProjectHealthCard } from "@/components/dashboard/ProjectHealthCard";
 import { RateCardEditor } from "@/components/clients/RateCardEditor";
 import { PortalBrandingEditor } from "@/components/clients/PortalBrandingEditor";
+import { BrandAssetsPanel } from "@/components/clients/BrandAssetsPanel";
 import { Button } from "@/components/ui/button";
 import { initials, formatCurrency } from "@/lib/utils";
 
@@ -120,6 +121,10 @@ export default function ClientDetailPage() {
       <div className="mt-10 grid gap-6 lg:grid-cols-2">
         <RateCardEditor clientId={client.id} />
         <PortalBrandingEditor clientId={client.id} />
+      </div>
+
+      <div className="mt-6">
+        <BrandAssetsPanel clientId={client.id} />
       </div>
 
       <h2 className="mt-10 mb-4 text-lg font-semibold tracking-tight">
