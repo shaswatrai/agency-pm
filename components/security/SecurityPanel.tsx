@@ -31,6 +31,7 @@ import {
   downloadUserDataExport,
   anonymizeUser,
 } from "@/lib/security/gdpr";
+import { SsoProvidersPanel } from "@/components/security/SsoProvidersPanel";
 import { toast } from "sonner";
 import type { OrgRole } from "@/types/domain";
 
@@ -249,6 +250,9 @@ export function SecurityPanel() {
           </div>
         )}
       </section>
+
+      {/* SSO providers */}
+      <SsoProvidersPanel />
 
       {/* Session + retention */}
       <section className="rounded-lg border bg-card p-5">
