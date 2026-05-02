@@ -18,6 +18,10 @@ import { useStore } from "@/lib/db/store";
 import { Card } from "@/components/ui/card";
 import { UserAvatar } from "@/components/UserAvatar";
 import { StatusPill } from "@/components/pills/StatusPill";
+import { BudgetBurnPanel } from "@/components/project/BudgetBurnPanel";
+import { RetrospectivePanel } from "@/components/sprint/RetrospectivePanel";
+import { ReleasesPanel } from "@/components/sprint/ReleasesPanel";
+import { MeetingNotesPanel } from "@/components/project/MeetingNotesPanel";
 import { cn, formatCurrency } from "@/lib/utils";
 
 export default function ProjectOverviewPage() {
@@ -86,6 +90,10 @@ export default function ProjectOverviewPage() {
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-[1600px] mx-auto">
+      <div className="mb-6">
+        <BudgetBurnPanel projectId={params.projectId} />
+      </div>
+
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
         {/* Main column */}
         <div className="space-y-6 min-w-0">
@@ -428,6 +436,13 @@ export default function ProjectOverviewPage() {
             </div>
           </Card>
         </aside>
+      </div>
+
+      {/* Sprint cadence: retros + releases — agile-mode features (PRD §5.13) */}
+      <div className="mt-8 grid gap-6">
+        <RetrospectivePanel projectId={params.projectId} />
+        <ReleasesPanel projectId={params.projectId} />
+        <MeetingNotesPanel projectId={params.projectId} />
       </div>
     </div>
   );

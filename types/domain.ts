@@ -67,6 +67,15 @@ export interface Client {
   /** Optional per-role rate overrides; sits between project override
    *  and the team member's default rate in the billing-rate hierarchy. */
   rateCard?: RateCardEntry[];
+  /** Per-client portal branding (PRD §5.5.1). Falls back to org defaults. */
+  portalBranding?: {
+    /** HSL hue for primary accent (0..360). */
+    accentHue?: number;
+    /** Welcome banner shown above the portal dashboard. */
+    welcomeMessage?: string;
+    /** Override the agency's "Atelier Studio · {client.name} portal" footer. */
+    footerOverride?: string;
+  };
   createdAt: string;
 }
 
@@ -100,6 +109,13 @@ export interface Project {
   code: string;
   name: string;
   type: ProjectType;
+  /** Granular sub-type from the bundled templates (PRD §5.1.2 / §5.11.1).
+   *  e.g. "wordpress_standard", "react_custom", "shopify_ecom",
+   *  "rn_mobile_app", "native_ios_android", "seo_retainer", "ppc",
+   *  "social_media", "brand_identity", "maintenance_retainer". */
+  subType?: string;
+  /** ID of the template (if any) the project was instantiated from. */
+  templateId?: string;
   startDate?: string;
   endDate?: string;
   status: ProjectStatus;
@@ -370,6 +386,59 @@ export interface ProjectFile {
   createdAt: string;
   /** Storage path inside the `project-files` bucket; undefined for in-memory demo files. */
   storagePath?: string;
+  /** OCR / extracted text content for full-text search (PRD §5.7).
+   *  Real mode populates this asynchronously after upload via a
+   *  Tika / OpenAI vision pass. Demo mode synthesizes deterministic
+   *  text from the file name + mime type for testing. */
+  extractedText?: string;
+  /** Tracks whether the OCR pipeline ran. */
+  ocrStatus?: "pending" | "complete" | "failed" | "skipped";
+}
+
+// ----------------------------------------------------------------------------
+// Brand asset library (PRD §5.7)
+// ----------------------------------------------------------------------------
+export type BrandAssetKind =
+  | "logo"
+  | "color"
+  | "font"
+  | "guideline"
+  | "template"
+  | "imagery";
+
+export interface BrandAsset {
+  id: string;
+  organizationId: string;
+  clientId: string;
+  kind: BrandAssetKind;
+  name: string;
+  description?: string;
+  /** kind-specific payload:
+   *   logo:       { url, fileName, variant: "primary" | "mono" | "wordmark" }
+   *   color:      { hex, name, swatchType: "primary" | "secondary" | "accent" }
+   *   font:       { family, weights[], usage }
+   *   guideline:  { url, fileName }
+   *   template:   { url, fileName, format }
+   *   imagery:    { url, alt }
+   */
+  metadata: Record<string, unknown>;
+  /** Optional file reference (when the asset has a binary). */
+  fileId?: string;
+  uploadedBy?: string;
+  createdAt: string;
+}
+
+// ----------------------------------------------------------------------------
+// Storage quotas (PRD §5.7)
+// ----------------------------------------------------------------------------
+export interface StorageQuota {
+  organizationId: string;
+  /** Org-wide cap in bytes; 0 = unlimited. */
+  totalLimitBytes: number;
+  /** Per-project cap; 0 = inherits org-wide. */
+  perProjectLimitBytes: number;
+  /** % usage that triggers an alert (default 80). */
+  warningThresholdPct: number;
 }
 
 // ----------------------------------------------------------------------------
@@ -869,6 +938,265 @@ export interface IntegrationJob {
   lastError?: string;
   result?: Record<string, unknown>;
   createdAt: string;
+}
+
+// ----------------------------------------------------------------------------
+// Sprint retros + releases (PRD §5.13)
+// ----------------------------------------------------------------------------
+export interface RetroNote {
+  id: string;
+  category: "went_well" | "didnt_go_well" | "action_item";
+  body: string;
+  authorId?: string;
+  /** When category=action_item and converted, the resulting taskId. */
+  taskId?: string;
+  createdAt: string;
+}
+
+export interface SprintRetro {
+  id: string;
+  organizationId: string;
+  projectId: string;
+  sprintLabel: string;
+  /** Inclusive window for the sprint this retro covers. */
+  startDate: string;
+  endDate: string;
+  notes: RetroNote[];
+  createdAt: string;
+  createdBy?: string;
+}
+
+export type ReleaseStatus =
+  | "planning"
+  | "in_progress"
+  | "code_freeze"
+  | "released"
+  | "rolled_back";
+
+// ----------------------------------------------------------------------------
+// Approval signatures (PRD §5.5.2)
+// ----------------------------------------------------------------------------
+export interface ApprovalSignature {
+  id: string;
+  organizationId: string;
+  /** Polymorphic — task | quote | invoice | release | milestone */
+  entityType: "task" | "quote" | "invoice" | "release" | "milestone";
+  entityId: string;
+  action: "approved" | "revisions_requested" | "rejected";
+  signedName: string;
+  signedRole?: string;
+  signedAt: string;
+  signatureMethod: "checkbox" | "typed_name" | "drawn";
+  /** Optional comment captured alongside the signature. */
+  comment?: string;
+  /** When known — anonymized IP, browser ID. */
+  ipAddress?: string;
+  userAgent?: string;
+}
+
+// ----------------------------------------------------------------------------
+// Meeting notes (PRD §5.9)
+// ----------------------------------------------------------------------------
+export interface MeetingActionItem {
+  id: string;
+  body: string;
+  assigneeId?: string;
+  dueDate?: string;
+  taskId?: string;
+}
+
+export interface MeetingNote {
+  id: string;
+  organizationId: string;
+  projectId?: string;
+  clientId?: string;
+  title: string;
+  /** ISO date-time the meeting occurred. */
+  meetingAt: string;
+  attendees: string[]; // user ids or arbitrary email strings
+  agenda?: string;
+  notes: string;
+  actionItems: MeetingActionItem[];
+  createdAt: string;
+  createdBy?: string;
+}
+
+// ----------------------------------------------------------------------------
+// Support tickets (PRD §5.5.1)
+// ----------------------------------------------------------------------------
+export type SupportTicketStatus =
+  | "new"
+  | "in_progress"
+  | "waiting_on_client"
+  | "resolved"
+  | "closed";
+
+export interface SupportTicketResponse {
+  id: string;
+  authorId?: string;
+  authorEmail?: string;
+  body: string;
+  createdAt: string;
+}
+
+export interface SupportTicket {
+  id: string;
+  organizationId: string;
+  clientId: string;
+  projectId?: string;
+  subject: string;
+  body: string;
+  status: SupportTicketStatus;
+  priority: "low" | "medium" | "high" | "urgent";
+  submittedByEmail?: string;
+  assigneeId?: string;
+  taskId?: string;
+  responses: SupportTicketResponse[];
+  createdAt: string;
+  resolvedAt?: string;
+}
+
+// ----------------------------------------------------------------------------
+// Security settings (PRD §7)
+// ----------------------------------------------------------------------------
+export interface IpAllowlistEntry {
+  /** CIDR (192.168.1.0/24) or single IP. */
+  cidr: string;
+  label?: string;
+  addedAt: string;
+}
+
+export interface MfaEnrollment {
+  userId: string;
+  method: "totp";
+  /** otpauth:// URI shown once at enrollment. Cleared from the store
+   *  the next time the user logs in. */
+  setupUri?: string;
+  /** SHA-256 hex of the shared TOTP secret — never the secret itself. */
+  secretHash: string;
+  enrolledAt: string;
+  /** SHA-256 of each recovery code; comparison is constant-time on use. */
+  recoveryCodeHashes: string[];
+}
+
+export interface SecuritySettings {
+  organizationId: string;
+  /** Empty = no restriction. */
+  ipAllowlist: IpAllowlistEntry[];
+  /** Roles that MUST have MFA enabled before they can log in. */
+  mfaRequiredForRoles: OrgRole[];
+  /** Soft session timeout in minutes; null = no auto-logout. */
+  sessionTimeoutMinutes: number | null;
+  /** Days to retain audit data after a churned client; 0 = forever. */
+  churnDataRetentionDays: number;
+  /** SAML / OIDC SSO provider config (PRD §7). */
+  ssoProviders?: SsoProvider[];
+  /** Domains that get auto-provisioned via JIT when SSO user signs in. */
+  jitProvisioningDomains?: string[];
+}
+
+// ----------------------------------------------------------------------------
+// SSO providers (PRD §7)
+// ----------------------------------------------------------------------------
+export type SsoProtocol = "saml" | "oidc";
+
+export interface SsoProvider {
+  id: string;
+  organizationId: string;
+  protocol: SsoProtocol;
+  displayName: string;
+  /** Vendor preset — "google_workspace" | "microsoft_entra" | "okta" | "generic" */
+  vendor: "google_workspace" | "microsoft_entra" | "okta" | "generic";
+  isActive: boolean;
+  /** SAML: idpEntityId + idpSsoUrl + idpCertificate (PEM)
+   *  OIDC: discoveryUrl + clientId + (server-side only) clientSecret */
+  config: Record<string, string>;
+  /** Default role assigned to new users provisioned via this provider. */
+  defaultRole: OrgRole;
+  createdAt: string;
+}
+
+// ----------------------------------------------------------------------------
+// Read receipts (PRD §5.5.3)
+// ----------------------------------------------------------------------------
+export interface ReadReceipt {
+  id: string;
+  organizationId: string;
+  /** What was viewed. Polymorphic across the same shape used by signatures. */
+  entityType: "task" | "file" | "invoice" | "milestone" | "comment";
+  entityId: string;
+  /** User id (internal) or email (client/external). */
+  viewerUserId?: string;
+  viewerEmail?: string;
+  /** Source — portal | email | direct */
+  channel: "portal" | "email" | "direct";
+  firstViewedAt: string;
+  lastViewedAt: string;
+  viewCount: number;
+}
+
+// ----------------------------------------------------------------------------
+// Email digests (PRD §5.5.3)
+// ----------------------------------------------------------------------------
+export type DigestCadence = "instant" | "daily" | "weekly" | "off";
+
+export interface EmailDigestPreference {
+  userId: string;
+  /** Per-event cadence — different for assignments vs. comments etc. */
+  events: {
+    assignments: DigestCadence;
+    mentions: DigestCadence;
+    deadlines: DigestCadence;
+    statusChanges: DigestCadence;
+    approvalsNeeded: DigestCadence;
+  };
+  /** Local hour-of-day (0..23) for daily digest delivery. */
+  dailyDigestHour: number;
+  /** Day of week (0=Sun..6=Sat) for weekly digest. */
+  weeklyDigestDay: number;
+}
+
+// ----------------------------------------------------------------------------
+// Email-to-task mapping (PRD §5.9)
+// ----------------------------------------------------------------------------
+export interface EmailToTaskMapping {
+  id: string;
+  organizationId: string;
+  projectId: string;
+  /** Generated unique inbox local-part: "tasks+iris-web-001-a8f3" */
+  localPart: string;
+  /** Full address inferred from inbox domain config. */
+  inboxAddress: string;
+  /** Default values applied to created tasks. */
+  defaults: {
+    status: "todo" | "in_progress";
+    priority: "low" | "medium" | "high" | "urgent";
+    assigneeId?: string;
+    tags: string[];
+  };
+  /** Senders permitted to create tasks. Empty = anyone. */
+  allowlistedSenders: string[];
+  isActive: boolean;
+  createdAt: string;
+  /** When the last successful inbound email landed. */
+  lastReceivedAt?: string;
+}
+
+export interface Release {
+  id: string;
+  organizationId: string;
+  projectId: string;
+  name: string;
+  /** Semver-ish or freeform — "v1.4", "Spring '26", "Q3 marketing push". */
+  version?: string;
+  status: ReleaseStatus;
+  targetDate?: string;
+  releasedAt?: string;
+  /** IDs of tasks in scope. Generated release notes are derived from this set. */
+  taskIds: string[];
+  notes?: string;
+  createdAt: string;
+  createdBy?: string;
 }
 
 /**

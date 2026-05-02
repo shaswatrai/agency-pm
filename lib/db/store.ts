@@ -52,6 +52,28 @@ import type {
   TimesheetSubmission,
   User,
   UserSkill,
+  Release,
+  ReleaseStatus,
+  SprintRetro,
+  RetroNote,
+  ApprovalSignature,
+  MeetingNote,
+  MeetingActionItem,
+  SupportTicket,
+  SupportTicketStatus,
+  SupportTicketResponse,
+  SecuritySettings,
+  IpAllowlistEntry,
+  MfaEnrollment,
+  OrgRole,
+  ReadReceipt,
+  EmailDigestPreference,
+  EmailToTaskMapping,
+  SsoProvider,
+  SsoProtocol,
+  BrandAsset,
+  BrandAssetKind,
+  StorageQuota,
 } from "@/types/domain";
 import type { TaskStatus } from "@/lib/design/tokens";
 
@@ -82,6 +104,19 @@ interface Store {
   fxRates: FxRate[];
   budgetChanges: BudgetChangeRequest[];
   timeTrackingConfig: TimeTrackingConfig;
+  sprintRetros: SprintRetro[];
+  releases: Release[];
+  approvalSignatures: ApprovalSignature[];
+  meetingNotes: MeetingNote[];
+  supportTickets: SupportTicket[];
+  securitySettings: SecuritySettings;
+  mfaEnrollments: MfaEnrollment[];
+  readReceipts: ReadReceipt[];
+  emailDigestPrefs: EmailDigestPreference[];
+  emailToTaskMappings: EmailToTaskMapping[];
+  ssoProviders: SsoProvider[];
+  brandAssets: BrandAsset[];
+  storageQuota: StorageQuota;
 
   // task ops
   moveTask: (taskId: string, status: TaskStatus, position: number) => void;
@@ -195,6 +230,123 @@ interface Store {
   // time tracking config
   setTimeTrackingConfig: (patch: Partial<TimeTrackingConfig>) => void;
   toggleLockedWeek: (weekStart: string) => void;
+  // sprint retro ops
+  addSprintRetro: (
+    retro: Omit<SprintRetro, "id" | "organizationId" | "createdAt" | "notes"> & {
+      notes?: SprintRetro["notes"];
+    },
+  ) => SprintRetro;
+  addRetroNote: (
+    retroId: string,
+    note: Omit<RetroNote, "id" | "createdAt">,
+  ) => RetroNote | null;
+  removeRetroNote: (retroId: string, noteId: string) => void;
+  /** Convert an action_item RetroNote into a real Task and link it. */
+  convertRetroActionToTask: (retroId: string, noteId: string) => string | null;
+  // release ops
+  addRelease: (
+    release: Omit<Release, "id" | "organizationId" | "createdAt" | "taskIds"> & {
+      taskIds?: string[];
+    },
+  ) => Release;
+  updateRelease: (id: string, patch: Partial<Release>) => void;
+  setReleaseStatus: (id: string, status: ReleaseStatus) => void;
+  addTasksToRelease: (releaseId: string, taskIds: string[]) => void;
+  removeTaskFromRelease: (releaseId: string, taskId: string) => void;
+  removeRelease: (id: string) => void;
+
+  // approval signatures
+  addApprovalSignature: (
+    sig: Omit<ApprovalSignature, "id" | "organizationId" | "signedAt"> & {
+      signedAt?: string;
+    },
+  ) => ApprovalSignature;
+
+  // meeting notes
+  addMeetingNote: (
+    note: Omit<MeetingNote, "id" | "organizationId" | "createdAt" | "actionItems"> & {
+      actionItems?: MeetingActionItem[];
+    },
+  ) => MeetingNote;
+  updateMeetingNote: (id: string, patch: Partial<MeetingNote>) => void;
+  removeMeetingNote: (id: string) => void;
+  addMeetingActionItem: (
+    noteId: string,
+    item: Omit<MeetingActionItem, "id">,
+  ) => MeetingActionItem | null;
+  convertMeetingActionToTask: (noteId: string, itemId: string) => string | null;
+
+  // support tickets
+  addSupportTicket: (
+    t: Omit<SupportTicket, "id" | "organizationId" | "createdAt" | "responses" | "status"> & {
+      status?: SupportTicketStatus;
+    },
+  ) => SupportTicket;
+  setTicketStatus: (id: string, status: SupportTicketStatus) => void;
+  addTicketResponse: (
+    ticketId: string,
+    body: string,
+    authorId?: string,
+    authorEmail?: string,
+  ) => SupportTicketResponse | null;
+  convertTicketToTask: (ticketId: string) => string | null;
+
+  // security settings (PRD §7)
+  updateSecuritySettings: (patch: Partial<SecuritySettings>) => void;
+  addIpAllowlistEntry: (entry: Omit<IpAllowlistEntry, "addedAt">) => void;
+  removeIpAllowlistEntry: (cidr: string) => void;
+  toggleMfaRequiredForRole: (role: OrgRole) => void;
+  /** Demo-mode TOTP enrollment. The browser computes the secret hash;
+   *  real mode hands this off to a server-side enrollment API. */
+  enrollMfa: (
+    enrollment: Omit<MfaEnrollment, "enrolledAt">,
+  ) => MfaEnrollment;
+  removeMfaEnrollment: (userId: string) => void;
+
+  // read receipts (PRD §5.5.3)
+  recordReadReceipt: (input: {
+    entityType: ReadReceipt["entityType"];
+    entityId: string;
+    viewerUserId?: string;
+    viewerEmail?: string;
+    channel?: ReadReceipt["channel"];
+  }) => ReadReceipt;
+
+  // email digest preferences (PRD §5.5.3)
+  setDigestPreference: (
+    userId: string,
+    patch: Partial<EmailDigestPreference["events"]> & {
+      dailyDigestHour?: number;
+      weeklyDigestDay?: number;
+    },
+  ) => void;
+
+  // email-to-task mappings (PRD §5.9)
+  createEmailToTaskMapping: (
+    input: Omit<
+      EmailToTaskMapping,
+      "id" | "organizationId" | "createdAt" | "localPart" | "inboxAddress"
+    >,
+  ) => EmailToTaskMapping;
+  toggleEmailToTaskMapping: (id: string) => void;
+  removeEmailToTaskMapping: (id: string) => void;
+
+  // SSO providers (PRD §7)
+  addSsoProvider: (
+    p: Omit<SsoProvider, "id" | "organizationId" | "createdAt">,
+  ) => SsoProvider;
+  updateSsoProvider: (id: string, patch: Partial<SsoProvider>) => void;
+  removeSsoProvider: (id: string) => void;
+
+  // brand asset library (PRD §5.7)
+  addBrandAsset: (
+    asset: Omit<BrandAsset, "id" | "organizationId" | "createdAt">,
+  ) => BrandAsset;
+  updateBrandAsset: (id: string, patch: Partial<BrandAsset>) => void;
+  removeBrandAsset: (id: string) => void;
+
+  // storage quotas (PRD §5.7)
+  updateStorageQuota: (patch: Partial<StorageQuota>) => void;
 }
 
 let counter = 1000;
@@ -239,6 +391,30 @@ export const useStore = create<Store>((set, get) => ({
   fxRates: FX_RATES,
   budgetChanges: BUDGET_CHANGES,
   timeTrackingConfig: TIME_TRACKING_CONFIG,
+  sprintRetros: [],
+  releases: [],
+  approvalSignatures: [],
+  meetingNotes: [],
+  supportTickets: [],
+  securitySettings: {
+    organizationId: ORG.id,
+    ipAllowlist: [],
+    mfaRequiredForRoles: [],
+    sessionTimeoutMinutes: null,
+    churnDataRetentionDays: 0,
+  },
+  mfaEnrollments: [],
+  readReceipts: [],
+  emailDigestPrefs: [],
+  emailToTaskMappings: [],
+  ssoProviders: [],
+  brandAssets: [],
+  storageQuota: {
+    organizationId: ORG.id,
+    totalLimitBytes: 0,
+    perProjectLimitBytes: 0,
+    warningThresholdPct: 80,
+  },
 
   moveTask: (taskId, status, position) => {
     const prev = get().tasks.find((t) => t.id === taskId);
@@ -1414,6 +1590,532 @@ export const useStore = create<Store>((set, get) => ({
     void import("@/lib/db/recordSync").then(({ syncTimeTrackingConfig }) =>
       syncTimeTrackingConfig(updated, orgId),
     );
+  },
+
+  // ----- sprint retro ops -----
+  addSprintRetro: (input) => {
+    const retro: SprintRetro = {
+      id: uuidOrFallback("retro"),
+      organizationId: get().organization.id,
+      projectId: input.projectId,
+      sprintLabel: input.sprintLabel,
+      startDate: input.startDate,
+      endDate: input.endDate,
+      notes: input.notes ?? [],
+      createdAt: new Date().toISOString(),
+      createdBy: input.createdBy,
+    };
+    set((s) => ({ sprintRetros: [retro, ...s.sprintRetros] }));
+    return retro;
+  },
+
+  addRetroNote: (retroId, note) => {
+    const retro = get().sprintRetros.find((r) => r.id === retroId);
+    if (!retro) return null;
+    const newNote: RetroNote = {
+      ...note,
+      id: uuidOrFallback("rnote"),
+      createdAt: new Date().toISOString(),
+    };
+    set((s) => ({
+      sprintRetros: s.sprintRetros.map((r) =>
+        r.id === retroId ? { ...r, notes: [...r.notes, newNote] } : r,
+      ),
+    }));
+    return newNote;
+  },
+
+  removeRetroNote: (retroId, noteId) => {
+    set((s) => ({
+      sprintRetros: s.sprintRetros.map((r) =>
+        r.id === retroId
+          ? { ...r, notes: r.notes.filter((n) => n.id !== noteId) }
+          : r,
+      ),
+    }));
+  },
+
+  convertRetroActionToTask: (retroId, noteId) => {
+    const retro = get().sprintRetros.find((r) => r.id === retroId);
+    const note = retro?.notes.find((n) => n.id === noteId);
+    if (!retro || !note || note.category !== "action_item") return null;
+    if (note.taskId) return note.taskId;
+    const newTask = get().addTask({
+      projectId: retro.projectId,
+      title: note.body,
+      status: "todo",
+      priority: "medium",
+      assigneeIds: note.authorId ? [note.authorId] : [],
+      tags: ["retrospective"],
+      clientVisible: false,
+      actualHours: 0,
+      commentCount: 0,
+      attachmentCount: 0,
+      subtaskCount: 0,
+      subtasksDone: 0,
+    });
+    set((s) => ({
+      sprintRetros: s.sprintRetros.map((r) =>
+        r.id === retroId
+          ? {
+              ...r,
+              notes: r.notes.map((n) =>
+                n.id === noteId ? { ...n, taskId: newTask.id } : n,
+              ),
+            }
+          : r,
+      ),
+    }));
+    return newTask.id;
+  },
+
+  // ----- release ops -----
+  addRelease: (input) => {
+    const release: Release = {
+      id: uuidOrFallback("rel"),
+      organizationId: get().organization.id,
+      projectId: input.projectId,
+      name: input.name,
+      version: input.version,
+      status: input.status,
+      targetDate: input.targetDate,
+      releasedAt: input.releasedAt,
+      taskIds: input.taskIds ?? [],
+      notes: input.notes,
+      createdAt: new Date().toISOString(),
+      createdBy: input.createdBy,
+    };
+    set((s) => ({ releases: [release, ...s.releases] }));
+    return release;
+  },
+
+  updateRelease: (id, patch) => {
+    set((s) => ({
+      releases: s.releases.map((r) => (r.id === id ? { ...r, ...patch } : r)),
+    }));
+  },
+
+  setReleaseStatus: (id, status) => {
+    set((s) => ({
+      releases: s.releases.map((r) =>
+        r.id === id
+          ? {
+              ...r,
+              status,
+              releasedAt:
+                status === "released" && !r.releasedAt
+                  ? new Date().toISOString()
+                  : r.releasedAt,
+            }
+          : r,
+      ),
+    }));
+  },
+
+  addTasksToRelease: (releaseId, taskIds) => {
+    set((s) => ({
+      releases: s.releases.map((r) =>
+        r.id === releaseId
+          ? { ...r, taskIds: Array.from(new Set([...r.taskIds, ...taskIds])) }
+          : r,
+      ),
+    }));
+  },
+
+  removeTaskFromRelease: (releaseId, taskId) => {
+    set((s) => ({
+      releases: s.releases.map((r) =>
+        r.id === releaseId
+          ? { ...r, taskIds: r.taskIds.filter((t) => t !== taskId) }
+          : r,
+      ),
+    }));
+  },
+
+  removeRelease: (id) => {
+    set((s) => ({ releases: s.releases.filter((r) => r.id !== id) }));
+  },
+
+  // ----- approval signatures (PRD §5.5.2) -----
+  addApprovalSignature: (input) => {
+    const sig: ApprovalSignature = {
+      ...input,
+      id: uuidOrFallback("sig"),
+      organizationId: get().organization.id,
+      signedAt: input.signedAt ?? new Date().toISOString(),
+    };
+    set((s) => ({ approvalSignatures: [sig, ...s.approvalSignatures] }));
+    return sig;
+  },
+
+  // ----- meeting notes (PRD §5.9) -----
+  addMeetingNote: (input) => {
+    const note: MeetingNote = {
+      id: uuidOrFallback("mn"),
+      organizationId: get().organization.id,
+      createdAt: new Date().toISOString(),
+      actionItems: input.actionItems ?? [],
+      ...input,
+    };
+    set((s) => ({ meetingNotes: [note, ...s.meetingNotes] }));
+    return note;
+  },
+  updateMeetingNote: (id, patch) => {
+    set((s) => ({
+      meetingNotes: s.meetingNotes.map((n) =>
+        n.id === id ? { ...n, ...patch } : n,
+      ),
+    }));
+  },
+  removeMeetingNote: (id) => {
+    set((s) => ({
+      meetingNotes: s.meetingNotes.filter((n) => n.id !== id),
+    }));
+  },
+  addMeetingActionItem: (noteId, item) => {
+    const note = get().meetingNotes.find((n) => n.id === noteId);
+    if (!note) return null;
+    const newItem: MeetingActionItem = {
+      ...item,
+      id: uuidOrFallback("mai"),
+    };
+    set((s) => ({
+      meetingNotes: s.meetingNotes.map((n) =>
+        n.id === noteId
+          ? { ...n, actionItems: [...n.actionItems, newItem] }
+          : n,
+      ),
+    }));
+    return newItem;
+  },
+  convertMeetingActionToTask: (noteId, itemId) => {
+    const note = get().meetingNotes.find((n) => n.id === noteId);
+    const item = note?.actionItems.find((i) => i.id === itemId);
+    if (!note || !item) return null;
+    if (item.taskId) return item.taskId;
+    if (!note.projectId) return null;
+    const newTask = get().addTask({
+      projectId: note.projectId,
+      title: item.body,
+      status: "todo",
+      priority: "medium",
+      assigneeIds: item.assigneeId ? [item.assigneeId] : [],
+      dueDate: item.dueDate,
+      tags: ["meeting"],
+      clientVisible: false,
+      actualHours: 0,
+      commentCount: 0,
+      attachmentCount: 0,
+      subtaskCount: 0,
+      subtasksDone: 0,
+    });
+    set((s) => ({
+      meetingNotes: s.meetingNotes.map((n) =>
+        n.id === noteId
+          ? {
+              ...n,
+              actionItems: n.actionItems.map((i) =>
+                i.id === itemId ? { ...i, taskId: newTask.id } : i,
+              ),
+            }
+          : n,
+      ),
+    }));
+    return newTask.id;
+  },
+
+  // ----- support tickets (PRD §5.5.1) -----
+  addSupportTicket: (input) => {
+    const ticket: SupportTicket = {
+      id: uuidOrFallback("tic"),
+      organizationId: get().organization.id,
+      createdAt: new Date().toISOString(),
+      responses: [],
+      status: input.status ?? "new",
+      ...input,
+    };
+    set((s) => ({ supportTickets: [ticket, ...s.supportTickets] }));
+    return ticket;
+  },
+  setTicketStatus: (id, status) => {
+    set((s) => ({
+      supportTickets: s.supportTickets.map((t) =>
+        t.id === id
+          ? {
+              ...t,
+              status,
+              resolvedAt:
+                status === "resolved" || status === "closed"
+                  ? t.resolvedAt ?? new Date().toISOString()
+                  : t.resolvedAt,
+            }
+          : t,
+      ),
+    }));
+  },
+  addTicketResponse: (ticketId, body, authorId, authorEmail) => {
+    const ticket = get().supportTickets.find((t) => t.id === ticketId);
+    if (!ticket) return null;
+    const resp: SupportTicketResponse = {
+      id: uuidOrFallback("tres"),
+      authorId,
+      authorEmail,
+      body,
+      createdAt: new Date().toISOString(),
+    };
+    set((s) => ({
+      supportTickets: s.supportTickets.map((t) =>
+        t.id === ticketId
+          ? { ...t, responses: [...t.responses, resp] }
+          : t,
+      ),
+    }));
+    return resp;
+  },
+  // ----- security (PRD §7) -----
+  updateSecuritySettings: (patch) => {
+    set((s) => ({
+      securitySettings: { ...s.securitySettings, ...patch },
+    }));
+  },
+  addIpAllowlistEntry: (entry) => {
+    set((s) => ({
+      securitySettings: {
+        ...s.securitySettings,
+        ipAllowlist: [
+          ...s.securitySettings.ipAllowlist.filter((e) => e.cidr !== entry.cidr),
+          { ...entry, addedAt: new Date().toISOString() },
+        ],
+      },
+    }));
+  },
+  removeIpAllowlistEntry: (cidr) => {
+    set((s) => ({
+      securitySettings: {
+        ...s.securitySettings,
+        ipAllowlist: s.securitySettings.ipAllowlist.filter((e) => e.cidr !== cidr),
+      },
+    }));
+  },
+  toggleMfaRequiredForRole: (role) => {
+    set((s) => {
+      const has = s.securitySettings.mfaRequiredForRoles.includes(role);
+      return {
+        securitySettings: {
+          ...s.securitySettings,
+          mfaRequiredForRoles: has
+            ? s.securitySettings.mfaRequiredForRoles.filter((r) => r !== role)
+            : [...s.securitySettings.mfaRequiredForRoles, role],
+        },
+      };
+    });
+  },
+  enrollMfa: (input) => {
+    const enrollment: MfaEnrollment = {
+      ...input,
+      enrolledAt: new Date().toISOString(),
+    };
+    set((s) => ({
+      mfaEnrollments: [
+        ...s.mfaEnrollments.filter((e) => e.userId !== input.userId),
+        enrollment,
+      ],
+    }));
+    return enrollment;
+  },
+  removeMfaEnrollment: (userId) => {
+    set((s) => ({
+      mfaEnrollments: s.mfaEnrollments.filter((e) => e.userId !== userId),
+    }));
+  },
+
+  // ----- read receipts (PRD §5.5.3) -----
+  recordReadReceipt: (input) => {
+    const orgId = get().organization.id;
+    const now = new Date().toISOString();
+    const existing = get().readReceipts.find(
+      (r) =>
+        r.entityType === input.entityType &&
+        r.entityId === input.entityId &&
+        ((input.viewerUserId && r.viewerUserId === input.viewerUserId) ||
+          (input.viewerEmail && r.viewerEmail === input.viewerEmail)),
+    );
+    if (existing) {
+      const updated: ReadReceipt = {
+        ...existing,
+        lastViewedAt: now,
+        viewCount: existing.viewCount + 1,
+      };
+      set((s) => ({
+        readReceipts: s.readReceipts.map((r) =>
+          r.id === existing.id ? updated : r,
+        ),
+      }));
+      return updated;
+    }
+    const receipt: ReadReceipt = {
+      id: uuidOrFallback("rr"),
+      organizationId: orgId,
+      entityType: input.entityType,
+      entityId: input.entityId,
+      viewerUserId: input.viewerUserId,
+      viewerEmail: input.viewerEmail,
+      channel: input.channel ?? "portal",
+      firstViewedAt: now,
+      lastViewedAt: now,
+      viewCount: 1,
+    };
+    set((s) => ({ readReceipts: [receipt, ...s.readReceipts] }));
+    return receipt;
+  },
+
+  // ----- email digest preferences (PRD §5.5.3) -----
+  setDigestPreference: (userId, patch) => {
+    set((s) => {
+      const existing = s.emailDigestPrefs.find((p) => p.userId === userId);
+      const base: EmailDigestPreference = existing ?? {
+        userId,
+        events: {
+          assignments: "instant",
+          mentions: "instant",
+          deadlines: "daily",
+          statusChanges: "daily",
+          approvalsNeeded: "instant",
+        },
+        dailyDigestHour: 9,
+        weeklyDigestDay: 1,
+      };
+      const next: EmailDigestPreference = {
+        ...base,
+        events: { ...base.events, ...(patch as Partial<typeof base.events>) },
+        dailyDigestHour: patch.dailyDigestHour ?? base.dailyDigestHour,
+        weeklyDigestDay: patch.weeklyDigestDay ?? base.weeklyDigestDay,
+      };
+      return {
+        emailDigestPrefs: existing
+          ? s.emailDigestPrefs.map((p) =>
+              p.userId === userId ? next : p,
+            )
+          : [...s.emailDigestPrefs, next],
+      };
+    });
+  },
+
+  // ----- email-to-task (PRD §5.9) -----
+  createEmailToTaskMapping: (input) => {
+    const project = get().projects.find((p) => p.id === input.projectId);
+    const random = Math.random().toString(36).slice(2, 6);
+    const localPart = `tasks+${(project?.code ?? "task").toLowerCase()}-${random}`;
+    const inboxAddress = `${localPart}@inbox.atelier.studio`;
+    const mapping: EmailToTaskMapping = {
+      ...input,
+      id: uuidOrFallback("e2t"),
+      organizationId: get().organization.id,
+      localPart,
+      inboxAddress,
+      createdAt: new Date().toISOString(),
+    };
+    set((s) => ({ emailToTaskMappings: [mapping, ...s.emailToTaskMappings] }));
+    return mapping;
+  },
+  toggleEmailToTaskMapping: (id) => {
+    set((s) => ({
+      emailToTaskMappings: s.emailToTaskMappings.map((m) =>
+        m.id === id ? { ...m, isActive: !m.isActive } : m,
+      ),
+    }));
+  },
+  removeEmailToTaskMapping: (id) => {
+    set((s) => ({
+      emailToTaskMappings: s.emailToTaskMappings.filter((m) => m.id !== id),
+    }));
+  },
+
+  // ----- SSO providers (PRD §7) -----
+  addSsoProvider: (input) => {
+    const provider: SsoProvider = {
+      ...input,
+      id: uuidOrFallback("sso"),
+      organizationId: get().organization.id,
+      createdAt: new Date().toISOString(),
+    };
+    set((s) => ({ ssoProviders: [provider, ...s.ssoProviders] }));
+    return provider;
+  },
+  updateSsoProvider: (id, patch) => {
+    set((s) => ({
+      ssoProviders: s.ssoProviders.map((p) =>
+        p.id === id ? { ...p, ...patch } : p,
+      ),
+    }));
+  },
+  removeSsoProvider: (id) => {
+    set((s) => ({
+      ssoProviders: s.ssoProviders.filter((p) => p.id !== id),
+    }));
+  },
+
+  // ----- brand asset library (PRD §5.7) -----
+  addBrandAsset: (input) => {
+    const asset: BrandAsset = {
+      ...input,
+      id: uuidOrFallback("ba"),
+      organizationId: get().organization.id,
+      createdAt: new Date().toISOString(),
+    };
+    set((s) => ({ brandAssets: [asset, ...s.brandAssets] }));
+    return asset;
+  },
+  updateBrandAsset: (id, patch) => {
+    set((s) => ({
+      brandAssets: s.brandAssets.map((a) =>
+        a.id === id ? { ...a, ...patch } : a,
+      ),
+    }));
+  },
+  removeBrandAsset: (id) => {
+    set((s) => ({ brandAssets: s.brandAssets.filter((a) => a.id !== id) }));
+  },
+
+  // ----- storage quotas (PRD §5.7) -----
+  updateStorageQuota: (patch) => {
+    set((s) => ({ storageQuota: { ...s.storageQuota, ...patch } }));
+  },
+
+  convertTicketToTask: (ticketId) => {
+    const ticket = get().supportTickets.find((t) => t.id === ticketId);
+    if (!ticket) return null;
+    if (ticket.taskId) return ticket.taskId;
+    // Resolve a project: ticket's projectId, or fall back to first active project for the client
+    let projectId = ticket.projectId;
+    if (!projectId) {
+      const project = get().projects.find(
+        (p) => p.clientId === ticket.clientId && p.status === "active",
+      );
+      projectId = project?.id;
+    }
+    if (!projectId) return null;
+    const newTask = get().addTask({
+      projectId,
+      title: ticket.subject,
+      description: ticket.body,
+      status: "todo",
+      priority: ticket.priority,
+      assigneeIds: ticket.assigneeId ? [ticket.assigneeId] : [],
+      tags: ["support_ticket"],
+      clientVisible: true,
+      actualHours: 0,
+      commentCount: 0,
+      attachmentCount: 0,
+      subtaskCount: 0,
+      subtasksDone: 0,
+    });
+    set((s) => ({
+      supportTickets: s.supportTickets.map((t) =>
+        t.id === ticketId ? { ...t, taskId: newTask.id, status: "in_progress" } : t,
+      ),
+    }));
+    return newTask.id;
   },
 }));
 

@@ -7,6 +7,8 @@ import { KanbanBoard } from "./KanbanBoard";
 import { Card } from "@/components/ui/card";
 import { TrendingDown, Zap, CheckSquare, Target } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { computeSprintMetrics } from "@/lib/sprint/metrics";
+import { SprintPlanningStrip } from "@/components/sprint/SprintPlanningStrip";
 
 interface SprintBoardProps {
   projectId: string;
@@ -25,56 +27,34 @@ export function SprintBoard({
     [allTasks, projectId],
   );
 
-  const totalPoints = tasks.reduce(
-    (sum, t) => sum + (t.storyPoints ?? Math.ceil((t.estimatedHours ?? 4) / 2)),
-    0,
+  const metrics = useMemo(
+    () => computeSprintMetrics({ tasks }),
+    [tasks],
   );
-  const donePoints = tasks
-    .filter((t) => t.status === "done")
-    .reduce(
-      (sum, t) =>
-        sum + (t.storyPoints ?? Math.ceil((t.estimatedHours ?? 4) / 2)),
-      0,
-    );
+  const { totalPoints, donePoints, todayIndex, burndown, velocity, velocityLabels } = metrics;
+
   const inProgress = tasks.filter((t) => t.status === "in_progress").length;
   const pct = totalPoints === 0 ? 0 : (donePoints / totalPoints) * 100;
-
-  // Synthetic burndown (10 days)
-  const burndown = useMemo(() => {
-    const days = 10;
-    const ideal = Array.from({ length: days + 1 }, (_, i) => ({
-      day: i,
-      ideal: totalPoints - (totalPoints / days) * i,
-    }));
-    const actual = Array.from({ length: 7 }, (_, i) => ({
-      day: i,
-      actual:
-        totalPoints -
-        Math.min(
-          totalPoints,
-          (donePoints / 6) * i + Math.sin(i) * 2,
-        ),
-    }));
-    return { ideal, actual, days };
-  }, [totalPoints, donePoints]);
 
   const W = 280;
   const H = 120;
   const PAD = 16;
-  const xMax = burndown.days;
-  const yMax = totalPoints;
+  const xMax = burndown.length - 1;
+  const yMax = Math.max(1, totalPoints);
 
   const xScale = (x: number) =>
     PAD + (x / xMax) * (W - PAD * 2);
   const yScale = (y: number) =>
     H - PAD - (y / yMax) * (H - PAD * 2);
 
-  const idealPath = burndown.ideal
+  const idealPath = burndown
     .map((p, i) => `${i === 0 ? "M" : "L"} ${xScale(p.day)} ${yScale(p.ideal)}`)
     .join(" ");
-  const actualPath = burndown.actual
-    .map((p, i) => `${i === 0 ? "M" : "L"} ${xScale(p.day)} ${yScale(p.actual)}`)
+  const actualPoints = burndown.filter((p) => p.actual !== null);
+  const actualPath = actualPoints
+    .map((p, i) => `${i === 0 ? "M" : "L"} ${xScale(p.day)} ${yScale(p.actual!)}`)
     .join(" ");
+  const maxVel = Math.max(1, ...velocity.map((v) => v.points));
 
   return (
     <div className="flex h-full">
@@ -93,11 +73,21 @@ export function SprintBoard({
           <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
             Active sprint
           </p>
-          <h3 className="mt-1 text-base font-semibold">Sprint 14</h3>
+          <h3 className="mt-1 text-base font-semibold">
+            Sprint {velocityLabels[velocityLabels.length - 1]?.replace("S", "") ?? ""}
+          </h3>
           <p className="text-xs text-muted-foreground">
-            Apr 22 → May 5 · 6 days remaining
+            {(() => {
+              const start = new Date(Date.now() - 14 * 86_400_000);
+              const end = new Date();
+              const fmt = (d: Date) =>
+                d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+              return `${fmt(start)} → ${fmt(end)} · ${todayIndex} day${todayIndex === 1 ? "" : "s"} in`;
+            })()}
           </p>
         </motion.div>
+
+        <SprintPlanningStrip projectId={projectId} />
 
         <Card className="p-4">
           <div className="grid grid-cols-2 gap-3">
@@ -181,11 +171,11 @@ export function SprintBoard({
               animate={{ pathLength: 1 }}
               transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }}
             />
-            {burndown.actual.map((p, i) => (
+            {actualPoints.map((p, i) => (
               <motion.circle
                 key={i}
                 cx={xScale(p.day)}
-                cy={yScale(p.actual)}
+                cy={yScale(p.actual!)}
                 r={3}
                 fill="hsl(var(--primary))"
                 initial={{ scale: 0 }}
@@ -211,24 +201,37 @@ export function SprintBoard({
             Team velocity
           </p>
           <div className="flex h-20 items-end gap-1.5">
-            {[22, 28, 26, 32, 24, 30, 28].map((v, i) => (
+            {velocity.map((v, i) => (
               <motion.div
                 key={i}
                 initial={{ height: 0 }}
-                animate={{ height: `${(v / 35) * 100}%` }}
+                animate={{ height: `${(v.points / maxVel) * 100}%` }}
                 transition={{ delay: i * 0.05, duration: 0.4 }}
+                title={`${velocityLabels[i]}: ${v.points} pts`}
                 className={cn(
                   "flex-1 rounded-t bg-primary/20",
-                  i === 6 && "bg-primary",
+                  i === velocity.length - 1 && "bg-primary",
                 )}
               />
             ))}
           </div>
           <div className="mt-1 flex justify-between text-[9px] uppercase tracking-wider text-muted-foreground">
-            {["S8", "S9", "S10", "S11", "S12", "S13", "S14"].map((s) => (
+            {velocityLabels.map((s) => (
               <span key={s}>{s}</span>
             ))}
           </div>
+          {(() => {
+            const past = velocity.slice(0, -1);
+            const avg = past.length
+              ? Math.round(past.reduce((s, v) => s + v.points, 0) / past.length)
+              : 0;
+            return avg > 0 ? (
+              <p className="mt-2 text-[10px] text-muted-foreground">
+                Rolling avg: <span className="font-mono font-medium">{avg} pts</span> · current sprint{" "}
+                <span className="font-mono font-medium">{donePoints} pts</span>
+              </p>
+            ) : null;
+          })()}
         </Card>
       </aside>
     </div>

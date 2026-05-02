@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -12,6 +12,8 @@ import {
   Sparkles,
   Calendar,
   Loader2,
+  Receipt,
+  Download,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { useStore } from "@/lib/db/store";
@@ -19,6 +21,8 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { HealthPill } from "@/components/pills/HealthPill";
 import { StatusPill } from "@/components/pills/StatusPill";
+import { SignatureDialog } from "@/components/portal/SignatureDialog";
+import { SupportTicketsSection } from "@/components/portal/SupportTicketsSection";
 import { initials, formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -29,9 +33,11 @@ export default function ClientPortalPage() {
   const allTasks = useStore((s) => s.tasks);
   const allFiles = useStore((s) => s.files);
   const allComments = useStore((s) => s.comments);
+  const allInvoices = useStore((s) => s.invoices);
   const users = useStore((s) => s.users);
   const updateTask = useStore((s) => s.updateTask);
-  const [pending, setPending] = useState<string | null>(null);
+  const recordRead = useStore((s) => s.recordReadReceipt);
+  // pending is no longer used — signatures handled via pendingSig below.
 
   const client = allClients.find((c) => c.id === params.clientId);
   const projects = allProjects.filter((p) => p.clientId === params.clientId);
@@ -49,27 +55,41 @@ export default function ClientPortalPage() {
     ? allTasks.filter((t) => t.projectId === project.id && t.clientVisible)
     : [];
   const reviewTasks = tasks.filter((t) => t.status === "in_review");
+
+  // Read receipts (PRD §5.5.3): when the portal renders, record that
+  // the client saw each in_review deliverable. Only fires once per
+  // entity per session because recordReadReceipt dedupes on
+  // (entityType, entityId, viewerEmail).
+  useEffect(() => {
+    if (!client) return;
+    const viewerEmail = client.primaryContactEmail ?? `portal+${client.id}@anonymous`;
+    for (const t of reviewTasks) {
+      recordRead({
+        entityType: "task",
+        entityId: t.id,
+        viewerEmail,
+        channel: "portal",
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client?.id, reviewTasks.length]);
   const recentFiles = project
     ? allFiles.filter((f) => f.projectId === project.id && f.clientVisible)
     : [];
-  const handleApprove = async (taskId: string, title: string) => {
-    setPending(taskId);
-    await new Promise((r) => setTimeout(r, 500));
-    updateTask(taskId, { status: "done" });
-    setPending(null);
-    toast.success(`${title} approved`, {
-      description: "The team has been notified.",
-    });
+  // Signatures (PRD §5.5.2): both approve and request-changes capture
+  // a typed-name signature before applying the underlying status change.
+  const [pendingSig, setPendingSig] = useState<{
+    taskId: string;
+    title: string;
+    action: "approved" | "revisions_requested";
+  } | null>(null);
+
+  const handleApprove = (taskId: string, title: string) => {
+    setPendingSig({ taskId, title, action: "approved" });
   };
 
-  const handleRequestChanges = async (taskId: string, title: string) => {
-    setPending(taskId);
-    await new Promise((r) => setTimeout(r, 500));
-    updateTask(taskId, { status: "revisions" });
-    setPending(null);
-    toast.message(`Changes requested on ${title}`, {
-      description: "We'll get back to you within 48 hours.",
-    });
+  const handleRequestChanges = (taskId: string, title: string) => {
+    setPendingSig({ taskId, title, action: "revisions_requested" });
   };
 
   const recentComments = project
@@ -83,20 +103,42 @@ export default function ClientPortalPage() {
         .reverse()
     : [];
 
+  const accent = client.portalBranding?.accentHue ?? 220;
+  const accentSecondary = (accent + 40) % 360;
+  const welcomeMessage = client.portalBranding?.welcomeMessage;
+  const footerText =
+    client.portalBranding?.footerOverride ?? `Atelier Studio · ${client.name} portal`;
+
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10 md:px-8">
+    <div
+      className="mx-auto max-w-6xl px-4 py-10 md:px-8"
+      style={
+        {
+          "--portal-accent": `${accent} 80% 55%`,
+          "--portal-accent-soft": `${accent} 80% 95%`,
+        } as React.CSSProperties
+      }
+    >
       {/* Header */}
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div
-            className="grid size-10 place-items-center rounded-lg font-semibold text-white shadow-md"
-            style={{
-              background:
-                "linear-gradient(135deg, hsl(220, 80%, 60%), hsl(260, 70%, 50%))",
-            }}
-          >
-            {initials(client.name)}
-          </div>
+          {client.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={client.logoUrl}
+              alt={`${client.name} logo`}
+              className="size-10 rounded-lg object-cover shadow-md"
+            />
+          ) : (
+            <div
+              className="grid size-10 place-items-center rounded-lg font-semibold text-white shadow-md"
+              style={{
+                background: `linear-gradient(135deg, hsl(${accent}, 80%, 60%), hsl(${accentSecondary}, 70%, 50%))`,
+              }}
+            >
+              {initials(client.name)}
+            </div>
+          )}
           <div>
             <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
               Client portal
@@ -110,6 +152,21 @@ export default function ClientPortalPage() {
           </Button>
         </div>
       </header>
+
+      {welcomeMessage && (
+        <motion.div
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mt-6 rounded-lg border p-4 text-sm"
+          style={{
+            background: `hsl(${accent}, 80%, 97%)`,
+            borderColor: `hsl(${accent}, 60%, 85%)`,
+            color: `hsl(${accent}, 70%, 25%)`,
+          }}
+        >
+          {welcomeMessage}
+        </motion.div>
+      )}
 
       <motion.div
         initial={{ opacity: 0, y: 8 }}
@@ -265,22 +322,14 @@ export default function ClientPortalPage() {
                           size="sm"
                           className="flex-1"
                           onClick={() => handleApprove(t.id, t.title)}
-                          disabled={pending === t.id}
                         >
-                          {pending === t.id ? (
-                            <Loader2 className="size-4 animate-spin" />
-                          ) : (
-                            <>
-                              <CheckCircle2 className="size-4" /> Approve
-                            </>
-                          )}
+                          <CheckCircle2 className="size-4" /> Approve & sign
                         </Button>
                         <Button
                           size="sm"
                           variant="outline"
                           className="flex-1"
                           onClick={() => handleRequestChanges(t.id, t.title)}
-                          disabled={pending === t.id}
                         >
                           Request changes
                         </Button>
@@ -357,6 +406,74 @@ export default function ClientPortalPage() {
 
         <section>
           <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            <Receipt className="size-4" /> Invoice history
+          </h3>
+          <Card className="overflow-hidden">
+            {(() => {
+              const clientInvoices = allInvoices
+                .filter((inv) => inv.clientId === client.id)
+                .sort((a, b) => b.issueDate.localeCompare(a.issueDate));
+              if (clientInvoices.length === 0) {
+                return (
+                  <p className="px-5 py-6 text-sm text-muted-foreground">
+                    No invoices issued yet.
+                  </p>
+                );
+              }
+              return (
+                <ul className="divide-y">
+                  {clientInvoices.map((inv) => {
+                    const statusStyles = {
+                      paid: "bg-status-done/15 text-status-done",
+                      sent: "bg-status-progress/15 text-status-progress",
+                      overdue: "bg-status-blocked/15 text-status-blocked",
+                      draft: "bg-status-todo/15 text-status-todo",
+                      cancelled: "bg-muted text-muted-foreground",
+                    } as const;
+                    const balance = inv.total - inv.amountPaid;
+                    return (
+                      <li
+                        key={inv.id}
+                        className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-4 px-5 py-3 text-sm"
+                      >
+                        <div className="min-w-0">
+                          <p className="font-medium font-mono">{inv.number}</p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {format(parseISO(inv.issueDate), "MMM d, yyyy")} · due{" "}
+                            {format(parseISO(inv.dueDate), "MMM d")}
+                          </p>
+                        </div>
+                        <span
+                          className={`rounded-pill px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider ${
+                            statusStyles[inv.status as keyof typeof statusStyles] ?? statusStyles.draft
+                          }`}
+                        >
+                          {inv.status}
+                        </span>
+                        <div className="text-right">
+                          <p className="font-mono font-semibold">
+                            {formatCurrency(inv.total, inv.currency)}
+                          </p>
+                          {balance > 0 && inv.status !== "draft" && (
+                            <p className="text-[10px] text-muted-foreground">
+                              {formatCurrency(balance, inv.currency)} due
+                            </p>
+                          )}
+                        </div>
+                        <Button variant="ghost" size="sm" title="Download invoice (coming soon)">
+                          <Download className="size-3.5" />
+                        </Button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              );
+            })()}
+          </Card>
+        </section>
+
+        <section>
+          <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
             <FileText className="size-4" /> Shared files
           </h3>
           <Card className="divide-y">
@@ -392,15 +509,45 @@ export default function ClientPortalPage() {
             )}
           </Card>
         </section>
+
+        <section>
+          <SupportTicketsSection clientId={client.id} />
+        </section>
       </div>
 
       <footer className="mt-16 flex items-center justify-between text-[11px] text-muted-foreground border-t pt-6">
-        <span>Atelier Studio · {client.name} portal</span>
+        <span>{footerText}</span>
         <span className="inline-flex items-center gap-1">
           <Clock className="size-3" /> Last activity{" "}
           {format(new Date(), "MMM d, h:mm a")}
         </span>
       </footer>
+
+      {pendingSig && (
+        <SignatureDialog
+          open={true}
+          onOpenChange={(o) => !o && setPendingSig(null)}
+          action={pendingSig.action}
+          entityType="task"
+          entityId={pendingSig.taskId}
+          entityTitle={pendingSig.title}
+          onSigned={(sig) => {
+            updateTask(pendingSig.taskId, {
+              status: pendingSig.action === "approved" ? "done" : "revisions",
+            });
+            setPendingSig(null);
+            if (pendingSig.action === "approved") {
+              toast.success(`${pendingSig.title} approved`, {
+                description: `Signed by ${sig.signedName}.`,
+              });
+            } else {
+              toast.message(`Changes requested on ${pendingSig.title}`, {
+                description: `Signed by ${sig.signedName}.`,
+              });
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

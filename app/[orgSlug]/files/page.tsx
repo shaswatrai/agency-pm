@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { format, parseISO } from "date-fns";
 import {
@@ -11,9 +11,14 @@ import {
   Upload,
   Download,
   Loader2,
+  Search,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { searchFiles } from "@/lib/files/search";
+import { StorageQuotaPanel } from "@/components/files/StorageQuotaPanel";
 import {
   Dialog,
   DialogContent,
@@ -54,8 +59,21 @@ export default function FilesPage() {
   const [uploading, setUploading] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[] | null>(null);
   const [pendingProjectId, setPendingProjectId] = useState<string>("");
+  const [query, setQuery] = useState("");
+  const [filterProject, setFilterProject] = useState<string>("");
+  const [filterMime, setFilterMime] = useState<string>("");
   const cfg = useRuntimeConfig();
   const connected = cfg.useSupabase && cfg.supabaseUrl && cfg.supabaseAnonKey;
+
+  const hits = useMemo(
+    () =>
+      searchFiles(files, {
+        query: query.trim() || undefined,
+        projectId: filterProject || undefined,
+        mimeContains: filterMime || undefined,
+      }),
+    [files, query, filterProject, filterMime],
+  );
 
   // Project options sorted with active projects first
   const projectOptions = [...projects].sort((a, b) => {
@@ -166,6 +184,53 @@ export default function FilesPage() {
         />
       </motion.div>
 
+      {/* Search + filters */}
+      <div className="mb-4 grid gap-2 md:grid-cols-[1fr_180px_140px_auto]">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search file names + OCR text…"
+            className="pl-9"
+          />
+          {query && (
+            <button
+              onClick={() => setQuery("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 hover:bg-accent"
+            >
+              <X className="size-3" />
+            </button>
+          )}
+        </div>
+        <select
+          value={filterProject}
+          onChange={(e) => setFilterProject(e.target.value)}
+          className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+        >
+          <option value="">All projects</option>
+          {projectOptions.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+        <select
+          value={filterMime}
+          onChange={(e) => setFilterMime(e.target.value)}
+          className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+        >
+          <option value="">All types</option>
+          <option value="image/">Images</option>
+          <option value="video/">Videos</option>
+          <option value="pdf">PDFs</option>
+          <option value="text/">Text</option>
+        </select>
+        <span className="grid h-9 place-items-center rounded-md bg-muted px-3 text-xs text-muted-foreground">
+          {hits.length} of {files.length}
+        </span>
+      </div>
+
       <div className="overflow-hidden rounded-lg border bg-card">
         <table className="min-w-full divide-y">
           <thead className="bg-muted/40">
@@ -180,7 +245,7 @@ export default function FilesPage() {
             </tr>
           </thead>
           <tbody className="divide-y">
-            {files.map((f) => {
+            {hits.map(({ file: f, snippet }) => {
               const project = projects.find((p) => p.id === f.projectId);
               const user = users.find((u) => u.id === f.uploadedBy);
               const Icon = iconFor(f.mimeType);
@@ -196,6 +261,11 @@ export default function FilesPage() {
                         <p className="text-[11px] text-muted-foreground">
                           {f.mimeType ?? "—"}
                         </p>
+                        {snippet && (
+                          <p className="mt-1 max-w-md rounded bg-muted/50 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                            …{snippet}…
+                          </p>
+                        )}
                       </div>
                     </div>
                   </td>
@@ -242,13 +312,21 @@ export default function FilesPage() {
                 </tr>
               );
             })}
-            {files.length === 0 ? (
+            {hits.length === 0 ? (
               <tr>
                 <td colSpan={7} className="p-0">
                   <EmptyState
                     icon={Upload}
-                    title="No files yet"
-                    description="Drop files anywhere on this page or click Upload to add the first one."
+                    title={
+                      files.length === 0
+                        ? "No files yet"
+                        : "No files match the search"
+                    }
+                    description={
+                      files.length === 0
+                        ? "Drop files anywhere on this page or click Upload to add the first one."
+                        : "Try clearing the filters or using a different keyword."
+                    }
                     variant="inline"
                   />
                 </td>
@@ -256,6 +334,10 @@ export default function FilesPage() {
             ) : null}
           </tbody>
         </table>
+      </div>
+
+      <div className="mt-6">
+        <StorageQuotaPanel />
       </div>
 
       {/* Per-upload project chooser */}

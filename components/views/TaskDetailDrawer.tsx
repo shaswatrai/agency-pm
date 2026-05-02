@@ -43,6 +43,9 @@ import { SlaChip } from "@/components/views/SlaChip";
 import { FigmaFrameLink } from "@/components/integrations/FigmaFrameLink";
 import { RepoLink } from "@/components/integrations/RepoLink";
 import { StorageLink } from "@/components/integrations/StorageLink";
+import { CommentBody } from "@/components/comments/CommentBody";
+import { MentionTextarea } from "@/components/comments/MentionTextarea";
+import { ReadReceiptBadge } from "@/components/comms/ReadReceiptBadge";
 import { useStore, useCurrentUser } from "@/lib/db/store";
 import { cn } from "@/lib/utils";
 import {
@@ -206,6 +209,7 @@ export function TaskDetailDrawer({
                 <span className="font-mono">{task.code}</span>
                 <span>·</span>
                 <span>{project.name}</span>
+                <ReadReceiptBadge entityType="task" entityId={task.id} compact />
               </div>
               <SheetTitle className="mt-1 text-xl">
                 {editingTitle ? (
@@ -423,25 +427,19 @@ export function TaskDetailDrawer({
                                   {format(parseISO(c.createdAt), "MMM d, h:mm a")}
                                 </span>
                               </div>
-                              <p className="mt-1 text-sm leading-relaxed">
-                                {c.body}
-                              </p>
+                              <CommentBody body={c.body} />
                             </div>
                           </div>
                         );
                       })}
                     </div>
                     <div className="mt-3 flex gap-2">
-                      <Input
+                      <MentionTextarea
                         value={comment}
-                        onChange={(e) => setComment(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && !e.shiftKey) {
-                            e.preventDefault();
-                            handlePostComment();
-                          }
-                        }}
-                        placeholder="Write a comment…"
+                        onChange={setComment}
+                        onSubmit={handlePostComment}
+                        placeholder="Write a comment… use @ to mention teammates"
+                        rows={2}
                       />
                       <Button onClick={handlePostComment} disabled={!comment.trim()}>
                         <Send className="size-4" />

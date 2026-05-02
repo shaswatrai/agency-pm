@@ -112,6 +112,12 @@ export const CLIENTS: Client[] = [
       { role: "member", rate: 175 },
       { role: "qa", rate: 145 },
     ],
+    portalBranding: {
+      accentHue: 38,
+      welcomeMessage:
+        "Welcome to the Lumière Hotels collaboration space. Drop questions in any task — Marcus checks the portal twice a day.",
+      footerOverride: "Lumière × Atelier Studio · concierge for the team",
+    },
     createdAt: "2026-01-12T10:00:00Z",
   },
   {
