@@ -28,6 +28,7 @@ import { RecurringRulesPanel } from "@/components/settings/RecurringRulesPanel";
 import { SlaPoliciesPanel } from "@/components/settings/SlaPoliciesPanel";
 import { IntegrationsPanel } from "@/components/integrations/IntegrationsPanel";
 import { SecurityPanel } from "@/components/security/SecurityPanel";
+import { CommunicationsPanel } from "@/components/comms/CommunicationsPanel";
 import { useStore } from "@/lib/db/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -92,6 +93,13 @@ const SECTIONS: Section[] = [
     icon: Palette,
     title: "Branding",
     description: "Theme accent and client portal branding",
+  },
+  {
+    key: "communications",
+    icon: Mail,
+    title: "Communications",
+    description:
+      "Email digest cadence (instant / daily / weekly) per event type · email-to-task inboxes per project",
   },
   {
     key: "integrations",
@@ -371,6 +379,8 @@ export default function SettingsPage() {
                           </div>
                         </div>
                       )}
+
+                      {s.key === "communications" && <CommunicationsPanel />}
 
                       {s.key === "integrations" && <IntegrationsPanel />}
 

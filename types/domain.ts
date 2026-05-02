@@ -1036,6 +1036,97 @@ export interface SecuritySettings {
   sessionTimeoutMinutes: number | null;
   /** Days to retain audit data after a churned client; 0 = forever. */
   churnDataRetentionDays: number;
+  /** SAML / OIDC SSO provider config (PRD §7). */
+  ssoProviders?: SsoProvider[];
+  /** Domains that get auto-provisioned via JIT when SSO user signs in. */
+  jitProvisioningDomains?: string[];
+}
+
+// ----------------------------------------------------------------------------
+// SSO providers (PRD §7)
+// ----------------------------------------------------------------------------
+export type SsoProtocol = "saml" | "oidc";
+
+export interface SsoProvider {
+  id: string;
+  organizationId: string;
+  protocol: SsoProtocol;
+  displayName: string;
+  /** Vendor preset — "google_workspace" | "microsoft_entra" | "okta" | "generic" */
+  vendor: "google_workspace" | "microsoft_entra" | "okta" | "generic";
+  isActive: boolean;
+  /** SAML: idpEntityId + idpSsoUrl + idpCertificate (PEM)
+   *  OIDC: discoveryUrl + clientId + (server-side only) clientSecret */
+  config: Record<string, string>;
+  /** Default role assigned to new users provisioned via this provider. */
+  defaultRole: OrgRole;
+  createdAt: string;
+}
+
+// ----------------------------------------------------------------------------
+// Read receipts (PRD §5.5.3)
+// ----------------------------------------------------------------------------
+export interface ReadReceipt {
+  id: string;
+  organizationId: string;
+  /** What was viewed. Polymorphic across the same shape used by signatures. */
+  entityType: "task" | "file" | "invoice" | "milestone" | "comment";
+  entityId: string;
+  /** User id (internal) or email (client/external). */
+  viewerUserId?: string;
+  viewerEmail?: string;
+  /** Source — portal | email | direct */
+  channel: "portal" | "email" | "direct";
+  firstViewedAt: string;
+  lastViewedAt: string;
+  viewCount: number;
+}
+
+// ----------------------------------------------------------------------------
+// Email digests (PRD §5.5.3)
+// ----------------------------------------------------------------------------
+export type DigestCadence = "instant" | "daily" | "weekly" | "off";
+
+export interface EmailDigestPreference {
+  userId: string;
+  /** Per-event cadence — different for assignments vs. comments etc. */
+  events: {
+    assignments: DigestCadence;
+    mentions: DigestCadence;
+    deadlines: DigestCadence;
+    statusChanges: DigestCadence;
+    approvalsNeeded: DigestCadence;
+  };
+  /** Local hour-of-day (0..23) for daily digest delivery. */
+  dailyDigestHour: number;
+  /** Day of week (0=Sun..6=Sat) for weekly digest. */
+  weeklyDigestDay: number;
+}
+
+// ----------------------------------------------------------------------------
+// Email-to-task mapping (PRD §5.9)
+// ----------------------------------------------------------------------------
+export interface EmailToTaskMapping {
+  id: string;
+  organizationId: string;
+  projectId: string;
+  /** Generated unique inbox local-part: "tasks+iris-web-001-a8f3" */
+  localPart: string;
+  /** Full address inferred from inbox domain config. */
+  inboxAddress: string;
+  /** Default values applied to created tasks. */
+  defaults: {
+    status: "todo" | "in_progress";
+    priority: "low" | "medium" | "high" | "urgent";
+    assigneeId?: string;
+    tags: string[];
+  };
+  /** Senders permitted to create tasks. Empty = anyone. */
+  allowlistedSenders: string[];
+  isActive: boolean;
+  createdAt: string;
+  /** When the last successful inbound email landed. */
+  lastReceivedAt?: string;
 }
 
 export interface Release {

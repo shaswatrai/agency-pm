@@ -66,6 +66,11 @@ import type {
   IpAllowlistEntry,
   MfaEnrollment,
   OrgRole,
+  ReadReceipt,
+  EmailDigestPreference,
+  EmailToTaskMapping,
+  SsoProvider,
+  SsoProtocol,
 } from "@/types/domain";
 import type { TaskStatus } from "@/lib/design/tokens";
 
@@ -103,6 +108,10 @@ interface Store {
   supportTickets: SupportTicket[];
   securitySettings: SecuritySettings;
   mfaEnrollments: MfaEnrollment[];
+  readReceipts: ReadReceipt[];
+  emailDigestPrefs: EmailDigestPreference[];
+  emailToTaskMappings: EmailToTaskMapping[];
+  ssoProviders: SsoProvider[];
 
   // task ops
   moveTask: (taskId: string, status: TaskStatus, position: number) => void;
@@ -288,6 +297,41 @@ interface Store {
     enrollment: Omit<MfaEnrollment, "enrolledAt">,
   ) => MfaEnrollment;
   removeMfaEnrollment: (userId: string) => void;
+
+  // read receipts (PRD §5.5.3)
+  recordReadReceipt: (input: {
+    entityType: ReadReceipt["entityType"];
+    entityId: string;
+    viewerUserId?: string;
+    viewerEmail?: string;
+    channel?: ReadReceipt["channel"];
+  }) => ReadReceipt;
+
+  // email digest preferences (PRD §5.5.3)
+  setDigestPreference: (
+    userId: string,
+    patch: Partial<EmailDigestPreference["events"]> & {
+      dailyDigestHour?: number;
+      weeklyDigestDay?: number;
+    },
+  ) => void;
+
+  // email-to-task mappings (PRD §5.9)
+  createEmailToTaskMapping: (
+    input: Omit<
+      EmailToTaskMapping,
+      "id" | "organizationId" | "createdAt" | "localPart" | "inboxAddress"
+    >,
+  ) => EmailToTaskMapping;
+  toggleEmailToTaskMapping: (id: string) => void;
+  removeEmailToTaskMapping: (id: string) => void;
+
+  // SSO providers (PRD §7)
+  addSsoProvider: (
+    p: Omit<SsoProvider, "id" | "organizationId" | "createdAt">,
+  ) => SsoProvider;
+  updateSsoProvider: (id: string, patch: Partial<SsoProvider>) => void;
+  removeSsoProvider: (id: string) => void;
 }
 
 let counter = 1000;
@@ -345,6 +389,10 @@ export const useStore = create<Store>((set, get) => ({
     churnDataRetentionDays: 0,
   },
   mfaEnrollments: [],
+  readReceipts: [],
+  emailDigestPrefs: [],
+  emailToTaskMappings: [],
+  ssoProviders: [],
 
   moveTask: (taskId, status, position) => {
     const prev = get().tasks.find((t) => t.id === taskId);
@@ -1856,6 +1904,132 @@ export const useStore = create<Store>((set, get) => ({
   removeMfaEnrollment: (userId) => {
     set((s) => ({
       mfaEnrollments: s.mfaEnrollments.filter((e) => e.userId !== userId),
+    }));
+  },
+
+  // ----- read receipts (PRD §5.5.3) -----
+  recordReadReceipt: (input) => {
+    const orgId = get().organization.id;
+    const now = new Date().toISOString();
+    const existing = get().readReceipts.find(
+      (r) =>
+        r.entityType === input.entityType &&
+        r.entityId === input.entityId &&
+        ((input.viewerUserId && r.viewerUserId === input.viewerUserId) ||
+          (input.viewerEmail && r.viewerEmail === input.viewerEmail)),
+    );
+    if (existing) {
+      const updated: ReadReceipt = {
+        ...existing,
+        lastViewedAt: now,
+        viewCount: existing.viewCount + 1,
+      };
+      set((s) => ({
+        readReceipts: s.readReceipts.map((r) =>
+          r.id === existing.id ? updated : r,
+        ),
+      }));
+      return updated;
+    }
+    const receipt: ReadReceipt = {
+      id: uuidOrFallback("rr"),
+      organizationId: orgId,
+      entityType: input.entityType,
+      entityId: input.entityId,
+      viewerUserId: input.viewerUserId,
+      viewerEmail: input.viewerEmail,
+      channel: input.channel ?? "portal",
+      firstViewedAt: now,
+      lastViewedAt: now,
+      viewCount: 1,
+    };
+    set((s) => ({ readReceipts: [receipt, ...s.readReceipts] }));
+    return receipt;
+  },
+
+  // ----- email digest preferences (PRD §5.5.3) -----
+  setDigestPreference: (userId, patch) => {
+    set((s) => {
+      const existing = s.emailDigestPrefs.find((p) => p.userId === userId);
+      const base: EmailDigestPreference = existing ?? {
+        userId,
+        events: {
+          assignments: "instant",
+          mentions: "instant",
+          deadlines: "daily",
+          statusChanges: "daily",
+          approvalsNeeded: "instant",
+        },
+        dailyDigestHour: 9,
+        weeklyDigestDay: 1,
+      };
+      const next: EmailDigestPreference = {
+        ...base,
+        events: { ...base.events, ...(patch as Partial<typeof base.events>) },
+        dailyDigestHour: patch.dailyDigestHour ?? base.dailyDigestHour,
+        weeklyDigestDay: patch.weeklyDigestDay ?? base.weeklyDigestDay,
+      };
+      return {
+        emailDigestPrefs: existing
+          ? s.emailDigestPrefs.map((p) =>
+              p.userId === userId ? next : p,
+            )
+          : [...s.emailDigestPrefs, next],
+      };
+    });
+  },
+
+  // ----- email-to-task (PRD §5.9) -----
+  createEmailToTaskMapping: (input) => {
+    const project = get().projects.find((p) => p.id === input.projectId);
+    const random = Math.random().toString(36).slice(2, 6);
+    const localPart = `tasks+${(project?.code ?? "task").toLowerCase()}-${random}`;
+    const inboxAddress = `${localPart}@inbox.atelier.studio`;
+    const mapping: EmailToTaskMapping = {
+      ...input,
+      id: uuidOrFallback("e2t"),
+      organizationId: get().organization.id,
+      localPart,
+      inboxAddress,
+      createdAt: new Date().toISOString(),
+    };
+    set((s) => ({ emailToTaskMappings: [mapping, ...s.emailToTaskMappings] }));
+    return mapping;
+  },
+  toggleEmailToTaskMapping: (id) => {
+    set((s) => ({
+      emailToTaskMappings: s.emailToTaskMappings.map((m) =>
+        m.id === id ? { ...m, isActive: !m.isActive } : m,
+      ),
+    }));
+  },
+  removeEmailToTaskMapping: (id) => {
+    set((s) => ({
+      emailToTaskMappings: s.emailToTaskMappings.filter((m) => m.id !== id),
+    }));
+  },
+
+  // ----- SSO providers (PRD §7) -----
+  addSsoProvider: (input) => {
+    const provider: SsoProvider = {
+      ...input,
+      id: uuidOrFallback("sso"),
+      organizationId: get().organization.id,
+      createdAt: new Date().toISOString(),
+    };
+    set((s) => ({ ssoProviders: [provider, ...s.ssoProviders] }));
+    return provider;
+  },
+  updateSsoProvider: (id, patch) => {
+    set((s) => ({
+      ssoProviders: s.ssoProviders.map((p) =>
+        p.id === id ? { ...p, ...patch } : p,
+      ),
+    }));
+  },
+  removeSsoProvider: (id) => {
+    set((s) => ({
+      ssoProviders: s.ssoProviders.filter((p) => p.id !== id),
     }));
   },
 

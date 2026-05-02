@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -36,6 +36,7 @@ export default function ClientPortalPage() {
   const allInvoices = useStore((s) => s.invoices);
   const users = useStore((s) => s.users);
   const updateTask = useStore((s) => s.updateTask);
+  const recordRead = useStore((s) => s.recordReadReceipt);
   // pending is no longer used — signatures handled via pendingSig below.
 
   const client = allClients.find((c) => c.id === params.clientId);
@@ -54,6 +55,24 @@ export default function ClientPortalPage() {
     ? allTasks.filter((t) => t.projectId === project.id && t.clientVisible)
     : [];
   const reviewTasks = tasks.filter((t) => t.status === "in_review");
+
+  // Read receipts (PRD §5.5.3): when the portal renders, record that
+  // the client saw each in_review deliverable. Only fires once per
+  // entity per session because recordReadReceipt dedupes on
+  // (entityType, entityId, viewerEmail).
+  useEffect(() => {
+    if (!client) return;
+    const viewerEmail = client.primaryContactEmail ?? `portal+${client.id}@anonymous`;
+    for (const t of reviewTasks) {
+      recordRead({
+        entityType: "task",
+        entityId: t.id,
+        viewerEmail,
+        channel: "portal",
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client?.id, reviewTasks.length]);
   const recentFiles = project
     ? allFiles.filter((f) => f.projectId === project.id && f.clientVisible)
     : [];

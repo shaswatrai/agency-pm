@@ -45,6 +45,7 @@ import { RepoLink } from "@/components/integrations/RepoLink";
 import { StorageLink } from "@/components/integrations/StorageLink";
 import { CommentBody } from "@/components/comments/CommentBody";
 import { MentionTextarea } from "@/components/comments/MentionTextarea";
+import { ReadReceiptBadge } from "@/components/comms/ReadReceiptBadge";
 import { useStore, useCurrentUser } from "@/lib/db/store";
 import { cn } from "@/lib/utils";
 import {
@@ -208,6 +209,7 @@ export function TaskDetailDrawer({
                 <span className="font-mono">{task.code}</span>
                 <span>·</span>
                 <span>{project.name}</span>
+                <ReadReceiptBadge entityType="task" entityId={task.id} compact />
               </div>
               <SheetTitle className="mt-1 text-xl">
                 {editingTitle ? (
